@@ -149,6 +149,62 @@ function createServer(): McpServer {
     },
   )
 
+  // ─── flyup_maintain ─────────────────────────────────────────
+  server.tool(
+    'flyup_maintain',
+    'Run maintenance: batch decay, consolidation, graph updates.',
+    {},
+    async () => {
+      store.load()
+      const result = await flyupMaintain(store)
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        }],
+      }
+    },
+  )
+
+  // ─── flyup_reflect ──────────────────────────────────────────
+  server.tool(
+    'flyup_reflect',
+    'Synthesize Mental Models from Observations using LLM (requires FLYUP_LLM_API_KEY).',
+    {
+      query: z.string().describe('Topic to synthesize a mental model about'),
+    },
+    async ({ query }) => {
+      store.load()
+      const result = await flyupReflect(query, store)
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(result, null, 2),
+        }],
+      }
+    },
+  )
+
+  // ─── flyup_pack ─────────────────────────────────────────────
+  server.tool(
+    'flyup_pack',
+    'Export or import a Knowledge Pack (YAML/JSON backup of all memories).',
+    {
+      action: z.enum(['export', 'import']).describe('Export or import'),
+      file_path: z.string().describe('File path for export/import'),
+    },
+    async ({ action, file_path }) => {
+      store.load()
+      const result = flyupPack(action, file_path, store)
+      return {
+        content: [{
+          type: 'text' as const,
+          text: result.details,
+        }],
+      }
+    },
+  )
+
   return server
 }
 
