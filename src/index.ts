@@ -32,7 +32,10 @@ export { batchDecay } from './lifecycle/batch-decay.js'
 export { consolidateUnmerged, clusterByEmbedding, mergeToObservation } from './lifecycle/consolidate.js'
 export { maintainGraph, maintainGraphBulk } from './lifecycle/graph-maintain.js'
 
-// Re-export Phase 4
+// Re-export Phase 5 — Plugins
+export { FlyupMemPlugin, createFlyupMemPlugin } from './plugins/openclaw.js'
+export type { OpenClawPluginConfig, AssembleContext, TurnContext } from './plugins/openclaw.js'
+export { createServer, startMcpServer } from './mcp/server.js'
 export { flyupReflect } from './tools/flyup_reflect.js'
 export { flyupPack } from './tools/flyup_pack.js'
 export { LLMClient, createLLMClient } from './enhance/llm-client.js'
