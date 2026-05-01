@@ -1,1 +1,0 @@
-{"version":3,"file":"semantic.d.ts","sourceRoot":"","sources":["../../src/search/semantic.ts"],"names":[],"mappings":"AAEA,OAAO,KAAK,EAAE,MAAM,EAAE,YAAY,EAAE,MAAM,kBAAkB,CAAA;AAG5D;;GAEG;AACH,wBAAgB,mBAAmB,IAAI,OAAO,CAE7C;AAED;;;GAGG;AACH,wBAAsB,cAAc,CAClC,KAAK,EAAE,MAAM,EACb,QAAQ,EAAE,MAAM,EAAE,EAClB,KAAK,SAAK,GACT,OAAO,CAAC,YAAY,EAAE,CAAC,CAkBzB"}

@@ -1,1 +1,0 @@
-{"version":3,"file":"flyup_status.d.ts","sourceRoot":"","sources":["../../src/tools/flyup_status.ts"],"names":[],"mappings":"AAEA,OAAO,KAAK,EAAE,aAAa,EAAE,MAAM,kBAAkB,CAAA;AAErD,MAAM,WAAW,YAAY;IAC3B,KAAK,EAAE,UAAU,CAAC,aAAa,CAAC,OAAO,CAAC,CAAC,CAAA;IACzC,MAAM,EAAE,UAAU,CAAC,aAAa,CAAC,aAAa,CAAC,CAAC,CAAA;CACjD;AAED;;GAEG;AACH,wBAAgB,WAAW,CAAC,KAAK,EAAE,aAAa,GAAG,YAAY,CAM9D"}
