@@ -2,6 +2,47 @@
 
 ## 2026-05-01 — Hermes MemoryProvider 接入验证
 
+### 2026-05-01 — Hermes Adapter 学习边界与 store 路径隔离
+
+继续 dogfood 时发现两个后续问题：
+
+1. Telegram/Hermes user content 可能带有系统注入的 `<memory-context>` / `<flyupmem-context>` 块，里面包含历史记忆文本。如果不剥离，会被自动学习入口误判。
+2. `FLYUPMEM_STORE_PATH` 没被 TypeScript `FlyupMemStore` 读取，导致 CLI/adapter 传入的隔离 store 路径被忽略。临时 dogfood 因此短暂写入真实 `~/.flyupmem`，已清理。
+
+处理结果：
+
+- `src/lifecycle/extract.ts`：抽取前剥离 injected memory context，并用剥离后的文本作为 source quote。
+- `hermes-plugin/__init__.py`：新增 `learnable_user_content()`，在 `sync_turn` / `on_session_end` / `on_pre_compress` / `flyup_learn` 工具入口统一清洗。
+- `hermes-plugin/__init__.py`：自动学习增加 signal 判定，像“继续”这种无记忆信号的普通短消息不会触发 CLI learn。
+- `src/core/store.ts`：`new FlyupMemStore()` 默认读取 `FLYUPMEM_STORE_PATH`，显式 config 仍优先。
+- `package.json`：`npm test` 现在同时跑 Vitest 和 Hermes Python plugin 边界测试。
+- `tests/extract.test.ts`：新增 recalled memory context 回归测试。
+- `tests/hermes_plugin_boundary_test.py`：新增 Hermes adapter 边界测试。
+- `tests/store.test.ts`：新增 `FLYUPMEM_STORE_PATH` 回归测试。
+
+验证：
+
+```bash
+npm run test:ts -- tests/store.test.ts
+npm test
+npm run build
+```
+
+结果：
+
+- store 单测：7 passed
+- 全量 Vitest：17 files / 93 tests passed
+- Hermes plugin Python unittest：4 passed
+- `tsc` build passed
+
+真实 CLI dogfood 使用临时 store 验证：
+
+- context-only learn：`extracted: 0`, `stored: 0`
+- explicit-with-context learn：只存入显式用户记忆 `记住：主人偏好直接给结论。`
+- recall 不再出现 injected dogfood marker
+- 临时 store status：1 条候选记忆
+- 真实 `~/.flyupmem` 已清理回 1 条正常 dogfood marker
+
 ### 2026-05-01 — Recall 污染清理与过滤回归
 
 Dogfood 召回时发现 `~/.flyupmem/engrams.yaml` 混入 3 条 Hermes 技能维护系统提示残片：

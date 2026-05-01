@@ -11,7 +11,9 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
+    "test": "vitest run && python3 -m unittest tests/hermes_plugin_boundary_test.py -v",
+    "test:ts": "vitest run",
+    "test:hermes-plugin": "python3 -m unittest tests/hermes_plugin_boundary_test.py -v",
     "test:watch": "vitest",
     "dev": "tsx src/index.ts"
   },

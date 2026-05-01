@@ -106,6 +106,24 @@ describe('FlyupMemStore', () => {
     expect(stats.engrams.candidate).toBe(1)
   })
 
+  it('honors FLYUPMEM_STORE_PATH when no explicit config is provided', () => {
+    const envDir = tmpDir()
+    const previous = process.env.FLYUPMEM_STORE_PATH
+    process.env.FLYUPMEM_STORE_PATH = envDir
+
+    try {
+      const envStore = new FlyupMemStore()
+      expect(envStore.basePath).toBe(envDir)
+    } finally {
+      if (previous === undefined) {
+        delete process.env.FLYUPMEM_STORE_PATH
+      } else {
+        process.env.FLYUPMEM_STORE_PATH = previous
+      }
+      fs.rmSync(envDir, { recursive: true, force: true })
+    }
+  })
+
   it('health check passes on clean store', () => {
     store.load()
     const h = store.healthCheck()

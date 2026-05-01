@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -25,6 +26,69 @@ from typing import Any, Dict, List, Optional
 from agent.memory_provider import MemoryProvider
 
 logger = logging.getLogger(__name__)
+
+
+META_INSTRUCTION_MARKERS = (
+    "review the conversation above",
+    "update the skill library",
+    "first-class skill signals",
+    "not just memory signals",
+    "update the relevant skill",
+)
+
+AUTO_LEARN_MARKERS = (
+    "记住",
+    "不是",
+    "不对",
+    "应该",
+    "以后",
+    "不要",
+    "别",
+    "我喜欢",
+    "我希望",
+    "默认",
+    "尽量",
+    "就这样",
+    "定了",
+    "统一",
+    "remember",
+    "note ",
+    "don't",
+    "do not",
+    "always",
+    "default to",
+    "instead of",
+)
+
+
+def strip_injected_memory_context(text: Any) -> str:
+    """Remove recalled/system-injected memory blocks before learning."""
+    if not isinstance(text, str):
+        return ""
+    cleaned = re.sub(r"<memory-context>[\s\S]*?</memory-context>", "", text, flags=re.IGNORECASE)
+    cleaned = re.sub(r"<flyupmem-context>[\s\S]*?</flyupmem-context>", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\[System note:[\s\S]*?\]\s*", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
+def is_meta_instruction_pollution(text: str) -> bool:
+    normalized = text.lower()
+    return any(marker in normalized for marker in META_INSTRUCTION_MARKERS)
+
+
+def learnable_user_content(text: Any) -> str:
+    """Return user-authored content safe to learn from, or empty string."""
+    cleaned = strip_injected_memory_context(text)
+    if not cleaned:
+        return ""
+    if is_meta_instruction_pollution(cleaned):
+        return ""
+    return cleaned
+
+
+def has_auto_learn_signal(text: str) -> bool:
+    normalized = text.lower()
+    return any(marker in normalized for marker in AUTO_LEARN_MARKERS)
 
 
 class FlyupMemProvider(MemoryProvider):
@@ -91,9 +155,13 @@ class FlyupMemProvider(MemoryProvider):
 
     def sync_turn(self, user_content: str, assistant_content: str, *, session_id: str = "") -> None:
         """Learn from the completed turn (non-blocking)."""
+        safe_user_content = learnable_user_content(user_content)
+        if not safe_user_content or not has_auto_learn_signal(safe_user_content):
+            return
+
         def _learn():
             try:
-                self._run_cli("learn", user_content, assistant_content)
+                self._run_cli("learn", safe_user_content, assistant_content)
                 self._turn_count += 1
 
                 # Run maintenance every 20 turns
@@ -171,7 +239,9 @@ class FlyupMemProvider(MemoryProvider):
                 return result or "<flyupmem-context>\n(no relevant memories)\n</flyupmem-context>"
 
             elif tool_name == "flyup_learn":
-                statement = args.get("statement", "")
+                statement = learnable_user_content(args.get("statement", ""))
+                if not statement:
+                    return '{"stored": 0, "skipped": 1}'
                 result = self._run_cli("learn", statement)
                 return result or '{"stored": 0}'
 
@@ -200,7 +270,9 @@ class FlyupMemProvider(MemoryProvider):
                     msg = messages[i]
                     next_msg = messages[i + 1] if i + 1 < len(messages) else None
                     if (msg.get("role") == "user" and next_msg and next_msg.get("role") == "assistant"):
-                        self._run_cli("learn", msg["content"], next_msg["content"])
+                        safe_user_content = learnable_user_content(msg.get("content", ""))
+                        if safe_user_content and has_auto_learn_signal(safe_user_content):
+                            self._run_cli("learn", safe_user_content, next_msg.get("content", ""))
 
                 # Run maintenance at session end
                 self._run_cli("maintain")
@@ -215,8 +287,8 @@ class FlyupMemProvider(MemoryProvider):
         learnings = []
         for msg in messages[-6:]:
             if msg.get("role") == "user":
-                content = msg.get("content", "")
-                if any(kw in content for kw in ["记住", "不是", "以后", "我喜欢", "不要"]):
+                content = learnable_user_content(msg.get("content", ""))
+                if content and any(kw in content for kw in ["记住", "不是", "以后", "我喜欢", "不要"]):
                     learnings.append(content[:200])
 
         if learnings:

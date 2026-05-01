@@ -23,6 +23,14 @@ function isMetaInstructionPollution(text: string): boolean {
   return META_INSTRUCTION_MARKERS.some(marker => normalized.includes(marker))
 }
 
+function stripInjectedMemoryContext(text: string): string {
+  return text
+    .replace(/<memory-context>[\s\S]*?<\/memory-context>/gi, '')
+    .replace(/<flyupmem-context>[\s\S]*?<\/flyupmem-context>/gi, '')
+    .replace(/\[System note:[\s\S]*?\]\s*/gi, '')
+    .trim()
+}
+
 const PATTERNS: ExtractionPattern[] = [
   // User corrections
   { regex: /不是[，,]?\s*(.{5,})/u, type: 'terminological', polarity: 'dont' },
@@ -64,13 +72,15 @@ export function extractEngramsFromTurn(
   origin: string = 'hermes:telegram',
 ): Omit<Engram, 'content_hash'>[] {
   const results: Omit<Engram, 'content_hash'>[] = []
-  if (isMetaInstructionPollution(userMsg)) return results
+  const learnableUserMsg = stripInjectedMemoryContext(userMsg)
+  if (!learnableUserMsg) return results
+  if (isMetaInstructionPollution(learnableUserMsg)) return results
 
   const now = new Date().toISOString()
   const today = now.slice(0, 10)
 
   for (const pattern of PATTERNS) {
-    const match = userMsg.match(pattern.regex)
+    const match = learnableUserMsg.match(pattern.regex)
     if (!match) continue
 
     const statement = match[0]
@@ -104,7 +114,7 @@ export function extractEngramsFromTurn(
       },
       source: {
         episode_id: null,
-        quote: userMsg.slice(0, 200),
+        quote: learnableUserMsg.slice(0, 200),
         origin,
       },
 

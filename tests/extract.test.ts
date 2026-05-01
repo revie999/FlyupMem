@@ -47,6 +47,39 @@ describe('extractEngramsFromTurn', () => {
     expect(results).toEqual([])
   })
 
+  it('ignores recalled memory context appended to user messages', () => {
+    const results = extractEngramsFromTurn(
+      `继续
+
+<memory-context>
+[System note: The following is recalled memory context, NOT new user input.]
+
+<flyupmem-context>
+### Consider
+[ENG-20260501-001] 记住：FlyupMem dogfood marker 是 hermes-adapter-smoke-20260501。
+</flyupmem-context>
+</memory-context>`,
+      '好的，继续',
+    )
+    expect(results).toEqual([])
+  })
+
+  it('still learns explicit user memory before recalled memory context', () => {
+    const results = extractEngramsFromTurn(
+      `记住：主人偏好直接给结论。
+
+<memory-context>
+<flyupmem-context>
+[ENG-20260501-001] 记住：FlyupMem dogfood marker 是 hermes-adapter-smoke-20260501。
+</flyupmem-context>
+</memory-context>`,
+      '好的',
+    )
+    expect(results).toHaveLength(1)
+    expect(results[0].statement).toContain('主人偏好直接给结论')
+    expect(results[0].statement).not.toContain('dogfood marker')
+  })
+
   it('generates unique IDs', () => {
     const results = extractEngramsFromTurn(
       '以后都用 Vitest 不用 Jest',

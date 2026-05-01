@@ -42,7 +42,12 @@ export class FlyupMemStore {
   private _loaded = false
 
   constructor(config?: Partial<FlyupMemConfig>) {
-    this.config = { ...DEFAULT_CONFIG, ...config }
+    const envStorePath = process.env.FLYUPMEM_STORE_PATH
+    this.config = {
+      ...DEFAULT_CONFIG,
+      ...(envStorePath ? { store_path: envStorePath } : {}),
+      ...config,
+    }
     this.basePath = expandHome(this.config.store_path)
   }
 
