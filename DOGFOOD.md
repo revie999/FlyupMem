@@ -2,6 +2,36 @@
 
 ## 2026-05-01 — Hermes MemoryProvider 接入验证
 
+### 2026-05-01 — Recall 污染清理与过滤回归
+
+Dogfood 召回时发现 `~/.flyupmem/engrams.yaml` 混入 3 条 Hermes 技能维护系统提示残片：
+
+- `ENG-20260501-002`
+- `ENG-20260501-003`
+- `ENG-20260501-004`
+
+处理结果：
+
+- 已从本地 FlyupMem store 删除上述 3 条污染 engram
+- `flyup_status` 现在显示只剩 1 条 dogfood marker 记忆
+- `flyup_recall` 不再返回英文系统/技能提示残片
+- 在 `extractEngramsFromTurn` 增加 meta skill-maintenance instruction 过滤
+- 新增回归测试：`does not extract meta skill-maintenance instructions as user memory`
+
+验证：
+
+```bash
+npm test -- tests/extract.test.ts
+npm test
+npm run build
+```
+
+结果：
+
+- `tests/extract.test.ts`: 6 passed
+- 全量测试：17 files / 90 tests passed
+- `tsc` build passed
+
 ### 环境
 
 - FlyupMem repo: `/Users/gm99/projects/flyupmem`

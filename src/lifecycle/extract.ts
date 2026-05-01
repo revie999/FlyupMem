@@ -10,6 +10,19 @@ interface ExtractionPattern {
   polarity: Polarity
 }
 
+const META_INSTRUCTION_MARKERS = [
+  'review the conversation above',
+  'update the skill library',
+  'first-class skill signals',
+  'not just memory signals',
+  'update the relevant skill',
+]
+
+function isMetaInstructionPollution(text: string): boolean {
+  const normalized = text.toLowerCase()
+  return META_INSTRUCTION_MARKERS.some(marker => normalized.includes(marker))
+}
+
 const PATTERNS: ExtractionPattern[] = [
   // User corrections
   { regex: /不是[，,]?\s*(.{5,})/u, type: 'terminological', polarity: 'dont' },
@@ -51,6 +64,8 @@ export function extractEngramsFromTurn(
   origin: string = 'hermes:telegram',
 ): Omit<Engram, 'content_hash'>[] {
   const results: Omit<Engram, 'content_hash'>[] = []
+  if (isMetaInstructionPollution(userMsg)) return results
+
   const now = new Date().toISOString()
   const today = now.slice(0, 10)
 
