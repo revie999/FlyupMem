@@ -12,6 +12,7 @@ import { flyupPack } from './tools/flyup_pack.js'
 import { flyupDoctor } from './tools/flyup_doctor.js'
 import { flyupSetup } from './tools/flyup_setup.js'
 import { flyupInspect } from './tools/flyup_inspect.js'
+import { configShow, configSet, configReset, configKeys } from './tools/flyup_config.js'
 import { initEmbedder } from './search/embed.js'
 
 // Re-export Phase 1-3
@@ -24,6 +25,8 @@ export { flyupSetup } from './tools/flyup_setup.js'
 export type { SetupResult, SetupStep } from './tools/flyup_setup.js'
 export { flyupInspect } from './tools/flyup_inspect.js'
 export type { InspectResult, MemoryDetail, RelatedMemory, GraphEdgeInfo, FeedbackSummary } from './tools/flyup_inspect.js'
+export { configShow, configSet, configReset, configKeys } from './tools/flyup_config.js'
+export type { ConfigResult } from './tools/flyup_config.js'
 export { unifiedRecall, recallWithExplanation, formatInjection } from './search/recall.js'
 export { extractEngramsFromTurn } from './lifecycle/extract.js'
 export { bm25Search } from './search/bm25.js'
@@ -227,6 +230,39 @@ async function main() {
       break
     }
 
+    case 'config': {
+      const sub = args[1]
+      if (!sub || sub === 'show') {
+        const result = configShow(store)
+        console.log(JSON.stringify(result.config, null, 2))
+      } else if (sub === 'set') {
+        const key = args[2]
+        const value = args[3]
+        if (!key || !value) {
+          console.error('Usage: flyupmem config set <key> <value>')
+          process.exit(1)
+        }
+        const result = configSet(store, key, value)
+        console.log(result.message)
+        if (!result.changed) process.exit(1)
+      } else if (sub === 'reset') {
+        const result = configReset(store)
+        console.log(result.message)
+      } else if (sub === 'keys') {
+        const keys = configKeys()
+        for (const k of keys) {
+          const def = k.values ? ` (${k.values.join('|')})` : ''
+          console.log(`  ${k.key} [${k.type}]${def}`)
+          console.log(`    ${k.description}`)
+          console.log(`    default: ${JSON.stringify(k.default)}`)
+        }
+      } else {
+        console.error(`Unknown config subcommand: ${sub}. Use: show | set | reset | keys`)
+        process.exit(1)
+      }
+      break
+    }
+
     default:
       console.log(`FlyupMem v0.4.0 — Local-first memory for AI agents
 
@@ -243,6 +279,10 @@ Usage:
   flyupmem doctor                            # Deep health check
   flyupmem setup [--force]                   # Environment check + store init
   flyupmem inspect <memory-id> [--json]      # Inspect memory detail & activation
+  flyupmem config [show]                     # Show current config
+  flyupmem config set <key> <value>          # Set config value
+  flyupmem config reset                      # Reset to defaults
+  flyupmem config keys                       # List available config keys
 
 Environment:
   FLYUP_LLM_API_KEY     LLM API key (for reflect/LLM extraction)

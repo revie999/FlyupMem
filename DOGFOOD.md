@@ -1,5 +1,43 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-01 — 配置面板 CLI
+
+增加交互式配置管理：以前只能通过代码或手动编辑 config.yaml 修改配置。
+
+处理结果：
+
+- 新增 `flyupmem config [show]`：查看当前有效配置（defaults + stored 合并）
+- 新增 `flyupmem config set <key> <value>`：设置配置值，带类型校验
+  - number 类型：校验 NaN
+  - boolean 类型：支持 true/false/yes/no/1/0/on/off
+  - string enum 类型：校验合法值（如 log_level: debug|info|warn|error）
+  - 未知 key 拒绝并列出可用 keys
+- 新增 `flyupmem config reset`：删除 config.yaml，恢复默认值
+- 新增 `flyupmem config keys`：列出所有可配置项（类型、描述、默认值）
+- 支持的配置项：
+  - store_path, max_engrams_per_file, max_file_size_mb
+  - decay_enabled, consolidation_enabled, embedding_enabled
+  - log_level
+
+验证：
+
+```bash
+npx vitest run tests/config.test.ts
+npm test
+npm run build
+node dist/index.js config show
+node dist/index.js config keys
+node dist/index.js config set log_level debug
+node dist/index.js config reset
+```
+
+结果：
+
+- `tests/config.test.ts`: 10 passed
+- 全量 Vitest + Hermes plugin: 21 files / 126 tests + 6 plugin tests — all passed
+- `tsc` build passed
+- CLI dogfood：show/set/reset/keys 全部正常
+
 ### 2026-05-01 — Memory Inspect 工具
 
 增加单条记忆深度检查能力：以前只能看全局 status，无法查看单条记忆的激活度衰减、关联关系和 graph 边。
