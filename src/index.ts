@@ -9,12 +9,18 @@ import { flyupFeedback } from './tools/flyup_feedback.js'
 import { flyupMaintain } from './tools/flyup_maintain.js'
 import { flyupReflect } from './tools/flyup_reflect.js'
 import { flyupPack } from './tools/flyup_pack.js'
+import { flyupDoctor } from './tools/flyup_doctor.js'
+import { flyupSetup } from './tools/flyup_setup.js'
 import { initEmbedder } from './search/embed.js'
 
 // Re-export Phase 1-3
 export { FlyupMemStore } from './core/store.js'
 export type * from './core/types.js'
 export { flyupLearn, flyupRecall, flyupRecallExplain, flyupStatus, flyupFeedback, flyupMaintain }
+export { flyupDoctor } from './tools/flyup_doctor.js'
+export type { DoctorResult, DoctorCheck } from './tools/flyup_doctor.js'
+export { flyupSetup } from './tools/flyup_setup.js'
+export type { SetupResult, SetupStep } from './tools/flyup_setup.js'
 export { unifiedRecall, recallWithExplanation, formatInjection } from './search/recall.js'
 export { extractEngramsFromTurn } from './lifecycle/extract.js'
 export { bm25Search } from './search/bm25.js'
@@ -39,6 +45,7 @@ export type { OpenClawPluginConfig, AssembleContext, TurnContext } from './plugi
 export { createServer, startMcpServer } from './mcp/server.js'
 export { flyupReflect } from './tools/flyup_reflect.js'
 export { flyupPack } from './tools/flyup_pack.js'
+export type { StatusResult } from './tools/flyup_status.js'
 export { LLMClient, createLLMClient } from './enhance/llm-client.js'
 export type { LLMConfig, LLMMessage, LLMResponse } from './enhance/llm-client.js'
 export { extractEngramsLLM } from './enhance/extract-llm.js'
@@ -142,6 +149,31 @@ async function main() {
       console.log(ok ? '✓ Embedding model ready' : '✗ Embedding model unavailable')
       break
     }
+    case 'doctor': {
+      console.log('Running doctor checks...\n')
+      const result = await flyupDoctor(store)
+      for (const check of result.checks) {
+        const icon = check.status === 'pass' ? '✅' : check.status === 'warn' ? '⚠️ ' : '❌'
+        console.log(`${icon} ${check.name}: ${check.message}`)
+        if (check.details) {
+          for (const d of check.details) console.log(`   └─ ${d}`)
+        }
+      }
+      console.log(`\nOverall: ${result.overall}`)
+      break
+    }
+
+    case 'setup': {
+      const force = args.includes('--force')
+      console.log('Setting up FlyupMem...\n')
+      const result = flyupSetup(store, force)
+      for (const step of result.steps) {
+        const icon = step.status === 'ok' ? '✅' : step.status === 'skip' ? '⏭️ ' : '❌'
+        console.log(`${icon} ${step.name}: ${step.message}`)
+      }
+      console.log(`\nSetup: ${result.ok ? 'complete ✅' : 'has failures ❌'}`)
+      break
+    }
 
     default:
       console.log(`FlyupMem v0.4.0 — Local-first memory for AI agents
@@ -156,6 +188,8 @@ Usage:
   flyupmem export [file.yaml]                # Export Knowledge Pack
   flyupmem import <file.yaml>                # Import Knowledge Pack
   flyupmem embed-init                        # Pre-load embedding model
+  flyupmem doctor                            # Deep health check
+  flyupmem setup [--force]                   # Environment check + store init
 
 Environment:
   FLYUP_LLM_API_KEY     LLM API key (for reflect/LLM extraction)

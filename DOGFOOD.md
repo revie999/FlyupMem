@@ -1,5 +1,53 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-01 — Doctor / Setup / Status CLI 子命令
+
+增加 P5 可观测性工具：以前只有 `flyup_status` 工具 API 返回 JSON，没有独立 CLI 诊断命令，排查问题不方便。
+
+处理结果：
+
+- 新增 `flyupmem doctor`：深度自检（10 项检查）
+  - store-path：目录存在且可写
+  - yaml-parsing：所有 YAML 文件可正常解析
+  - schema-validation：Zod 校验通过数 / 总数
+  - unique-ids：跨层 ID 唯一性
+  - graph-integrity：边和实体引用的有效性
+  - temporal：learned_at ≤ valid_from 一致性
+  - activation-range：激活值在 [0,1] 范围内
+  - embedding：BGE-small-zh 模型可用性
+  - file-size：YAML 文件大小阈值检查
+  - hermes-plugin：Hermes 插件符号链接检查
+- 新增 `flyupmem setup [--force]`：环境检查 + store 初始化
+  - Node.js 版本 ≥ 20
+  - 创建 store 目录和初始 YAML 文件（--force 可覆盖）
+  - @xenova/transformers 可用性
+  - Hermes 插件链接状态
+  - FLYUPMEM_STORE_PATH 环境变量
+- 增强 `flyupmem status`：新增 `summary` 字段（人类可读的一行摘要）
+- 所有新模块均有独立类型导出（DoctorResult, DoctorCheck, SetupResult, SetupStep, StatusResult）
+
+验证：
+
+```bash
+npx vitest run tests/doctor.test.ts tests/setup.test.ts
+npm test
+npm run build
+node dist/index.js doctor
+node dist/index.js setup
+node dist/index.js status
+```
+
+结果：
+
+- `tests/doctor.test.ts`: 6 passed
+- `tests/setup.test.ts`: 4 passed
+- 全量 Vitest + Hermes plugin: 19 files / 109 tests + 6 plugin tests — all passed
+- `tsc` build passed
+- CLI dogfood：
+  - `doctor`：8 pass / 1 warn（embedding 未加载，预期行为）
+  - `setup`：5 ok / 1 skip（onnx-runtime 未安装，预期行为）
+  - `status`：返回 stats + health + summary
+
 ## 2026-05-01 — Hermes MemoryProvider 接入验证
 
 ### 2026-05-01 — Recall explain/debug mode
