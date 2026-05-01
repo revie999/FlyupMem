@@ -3,6 +3,8 @@
 import type { Memory, ScoredResult } from '../core/types.js'
 import { embed, cosineSimilarity, isEmbeddingAvailable } from './embed.js'
 
+const MIN_SEMANTIC_SCORE = 0.5
+
 /**
  * Check if semantic search is available (embedding model loaded).
  */
@@ -28,7 +30,7 @@ export async function semanticSearch(
     const memEmb = await embed(mem.statement)
     if (!memEmb) continue
     const score = cosineSimilarity(queryEmb, memEmb)
-    if (score > 0.1) { // minimum threshold
+    if (score >= MIN_SEMANTIC_SCORE) {
       scored.push({ id: mem.id, score })
     }
   }

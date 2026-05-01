@@ -7,6 +7,7 @@ import { FlyupMemStore } from '../src/core/store.js'
 import { flyupLearn } from '../src/tools/flyup_learn.js'
 import { flyupRecall } from '../src/tools/flyup_recall.js'
 import { flyupStatus } from '../src/tools/flyup_status.js'
+import { initEmbedder, isEmbeddingAvailable } from '../src/search/embed.js'
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'flyupmem-integration-'))
@@ -65,5 +66,27 @@ describe('Integration: learn → recall → status', () => {
     // But frequency should be bumped
     const eng = store.engrams.find(e => e.statement.includes('端口'))
     expect(eng!.activation.frequency).toBeGreaterThan(1)
+  })
+
+  it('does not inject unrelated memories when query has no lexical or temporal match', async () => {
+    flyupLearn('记住：主人偏好直接给结论。', '好的', store)
+
+    const recallResult = await flyupRecall('dogfood marker hermes-adapter-smoke-20260501', store)
+
+    expect(recallResult.count).toBe(0)
+    expect(recallResult.injection).toContain('(no relevant memories)')
+    expect(recallResult.injection).not.toContain('主人偏好直接给结论')
+  })
+
+  it('does not inject unrelated memories when semantic search is available', async () => {
+    const ready = await initEmbedder()
+    if (!ready || !isEmbeddingAvailable()) return
+
+    flyupLearn('记住：主人偏好直接给结论。', '好的', store)
+
+    const recallResult = await flyupRecall('dogfood marker hermes-adapter-smoke-20260501', store)
+
+    expect(recallResult.count).toBe(0)
+    expect(recallResult.injection).not.toContain('主人偏好直接给结论')
   })
 })

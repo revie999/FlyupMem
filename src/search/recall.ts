@@ -76,6 +76,10 @@ export function formatInjection(memories: Memory[]): string {
   }
 
   const sections: string[] = []
+  if (directives.length === 0 && constraints.length === 0 && consider.length === 0) {
+    return '<flyupmem-context>\n(no relevant memories)\n</flyupmem-context>'
+  }
+
   if (directives.length > 0) {
     sections.push('### Directives (must follow)\n' + directives.join('\n'))
   }

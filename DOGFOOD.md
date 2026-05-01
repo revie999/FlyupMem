@@ -2,6 +2,44 @@
 
 ## 2026-05-01 — Hermes MemoryProvider 接入验证
 
+### 2026-05-01 — Recall 质量门禁：避免无关查询注入唯一记忆
+
+继续 dogfood 时发现一个召回质量问题：当 store 里只有 1 条记忆时，无关查询也可能被注入。根因有两层：
+
+1. `temporalSearch` 在 query 没有时间引用时给所有记忆 0.5 neutral score，RRF 会把唯一记忆合并进结果。
+2. `semanticSearch` 阈值过低（0.1），本地 embedding 对无关 dogfood marker 与中文偏好记忆仍给出约 0.36 的余弦相似度，导致误召回。
+
+处理结果：
+
+- `src/search/temporal.ts`：没有时间引用时 temporal signal 不参与召回，直接返回空结果。
+- `src/search/semantic.ts`：语义召回最低阈值提高到 `0.5`。
+- `src/search/recall.ts`：空召回注入格式改为明确的 `(no relevant memories)`，避免上层误读空 context。
+- `tests/temporal.test.ts`：新增无时间引用不返回 temporal candidates 的回归测试。
+- `tests/recall.test.ts`：新增 lexical/temporal/semantic 均无关时不注入记忆的回归测试。
+
+验证：
+
+```bash
+npm run test:ts -- tests/recall.test.ts tests/temporal.test.ts
+npm test
+npm run build
+```
+
+结果：
+
+- `tests/recall.test.ts` + `tests/temporal.test.ts`: 13 passed
+- 全量 Vitest：17 files / 96 tests passed
+- Hermes plugin Python unittest：4 passed
+- `tsc` build passed
+
+真实 CLI dogfood 使用临时 store 验证：
+
+- learn `记住：主人偏好直接给结论。`: stored 1
+- unrelated recall `dogfood marker hermes-adapter-smoke-20260501`: 返回 `(no relevant memories)`
+- relevant recall `直接给结论`: 正常返回该偏好记忆
+- temporal recall `今天记住了什么`: 正常返回该偏好记忆
+- 临时 store status：1 条候选记忆，health ok
+
 ### 2026-05-01 — Hermes Adapter 学习边界与 store 路径隔离
 
 继续 dogfood 时发现两个后续问题：

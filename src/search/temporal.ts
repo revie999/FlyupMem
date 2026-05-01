@@ -6,9 +6,7 @@ import type { ScoredResult, Memory, GraphData } from '../core/types.js'
  * Compute time relevance between a query time reference and a memory's learned_at.
  * Returns 0-1 score based on temporal proximity.
  */
-function timeRelevance(queryTimeRef: string | null, learnedAt: string): number {
-  if (!queryTimeRef) return 0.5 // no time reference → neutral score
-
+function timeRelevance(queryTimeRef: string, learnedAt: string): number {
   const queryTime = new Date(queryTimeRef).getTime()
   const memTime = new Date(learnedAt).getTime()
   const daysDiff = Math.abs(queryTime - memTime) / (1000 * 60 * 60 * 24)
@@ -68,13 +66,14 @@ export function temporalSearch(
   limit = 30,
 ): ScoredResult[] {
   const timeRef = queryTimeRef ?? extractTimeReference(query)
+  if (!timeRef) return []
 
   // Phase 1: Time window matching
   const candidates = memories
     .filter(m => m.temporal?.learned_at)
     .map(m => ({
       id: m.id,
-      score: timeRelevance(timeRef ?? null, m.temporal!.learned_at),
+      score: timeRelevance(timeRef, m.temporal!.learned_at),
     }))
     .filter(c => c.score > 0.2)
     .sort((a, b) => b.score - a.score)

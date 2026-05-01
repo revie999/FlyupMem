@@ -85,6 +85,11 @@ describe('temporalSearch', () => {
     expect(results.length).toBe(0)
   })
 
+  it('returns empty when query has no time reference', () => {
+    const results = temporalSearch('dogfood marker hermes adapter', memories, emptyGraph)
+    expect(results).toEqual([])
+  })
+
   it('BFS expands along temporal links', () => {
     const graph: GraphData = {
       entities: {},
