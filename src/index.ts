@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // src/index.ts — Entry point + CLI
 
 import { FlyupMemStore } from './core/store.js'

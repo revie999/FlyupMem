@@ -1,2 +1,6 @@
-node_modules/\ndist/\n*.sqlite\n~/.flyupmem/
+node_modules/
 dist/
+*.sqlite
+.flyupmem/
+__pycache__/
+*.pyc
