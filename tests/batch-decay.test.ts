@@ -63,9 +63,12 @@ describe('batchDecay', () => {
   })
 
   it('skips recently accessed memories', () => {
-    store.addEngram(makeEngram()) // accessed today
+    // Use full ISO datetime so the "today" check works correctly
+    const eng = makeEngram()
+    eng.activation.last_accessed = new Date().toISOString() // full datetime, not just date
+    store.addEngram(eng)
     const result = batchDecay(store)
-    expect(result.processed).toBe(0) // skipped, accessed today
+    expect(result.processed).toBe(0) // skipped, accessed just now
   })
 
   it('decays old memories', () => {
