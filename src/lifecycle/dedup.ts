@@ -1,7 +1,7 @@
 // src/lifecycle/dedup.ts — Content-hash dedup + high-similarity merge
 
 import type { Engram } from '../core/types.js'
-import { contentHash, isDuplicate } from '../core/hash.js'
+import { contentHash } from '../core/hash.js'
 import type { FlyupMemStore } from '../core/store.js'
 
 /**

@@ -195,7 +195,7 @@ export class FlyupMemPlugin {
    * Get store status.
    */
   status() {
-    const { flyupStatus } = require('../tools/flyup_status.js')
+    const { flyupStatus } = { flyupStatus: (s: FlyupMemStore) => ({ stats: s.stats(), health: s.healthCheck() }) }
     return flyupStatus(this.store)
   }
 }

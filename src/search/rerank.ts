@@ -104,7 +104,7 @@ export function localRerank(
       evidenceStrength: computeEvidenceStrength(mem),
       confidence: (mem.confidence ?? 5) / 10,
       scope: computeScopeMatch(mem.scope ?? 'global', queryScope ?? null),
-      polarity: computePolarity(mem.polarity ?? null),
+      polarity: computePolarity((mem as any).polarity ?? null),
     }
 
     // Weighted sum

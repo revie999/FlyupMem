@@ -3,7 +3,7 @@
 import type { Memory, ScoredResult } from '../core/types.js'
 import type { FlyupMemStore } from '../core/store.js'
 import { bm25Search } from './bm25.js'
-import { semanticSearch, isSemanticAvailable } from './semantic.js'
+import { semanticSearch } from './semantic.js'
 import { graphExpansion } from './graph.js'
 import { temporalSearch, extractTimeReference } from './temporal.js'
 import { rrfMerge } from './rrf.js'
@@ -27,7 +27,7 @@ function trimToTokenBudget(
   scored: Array<{ memory: Memory; score: number }>,
   budget: number,
 ): Memory[] {
-  const layerBudgets = {
+  const layerBudgets: Record<number, number> = {
     1: Math.floor(budget * 0.40),  // Mental Models — 40%
     2: Math.floor(budget * 0.35),  // Observations — 35%
     3: Math.floor(budget * 0.20),  // Engrams — 20%

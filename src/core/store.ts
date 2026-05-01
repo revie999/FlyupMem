@@ -73,7 +73,7 @@ export class FlyupMemStore {
     this._loaded = true
   }
 
-  private loadYaml<T>(filePath: string, schema: ReturnType<typeof EngramSchema>): T[] {
+  private loadYaml<T>(filePath: string, schema: { safeParse: (data: unknown) => { success: boolean; data?: T } }): T[] {
     if (!fs.existsSync(filePath)) return []
     try {
       const raw = yaml.load(fs.readFileSync(filePath, 'utf-8'))
@@ -90,7 +90,7 @@ export class FlyupMemStore {
     }
   }
 
-  private loadYamlOne<T>(filePath: string, schema: ReturnType<typeof GraphDataSchema>): T | null {
+  private loadYamlOne<T>(filePath: string, schema: { safeParse: (data: unknown) => { success: boolean; data?: T } }): T | null {
     if (!fs.existsSync(filePath)) return null
     try {
       const raw = yaml.load(fs.readFileSync(filePath, 'utf-8'))

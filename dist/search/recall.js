@@ -1,0 +1,134 @@
+// src/search/recall.ts — Unified recall pipeline (Phase 2: multi-signal)
+import { bm25Search } from './bm25.js';
+import { semanticSearch } from './semantic.js';
+import { graphExpansion } from './graph.js';
+import { temporalSearch } from './temporal.js';
+import { rrfMerge } from './rrf.js';
+import { localRerank } from './rerank.js';
+import { computeActivation } from '../lifecycle/decay.js';
+import { isEmbeddingAvailable } from './embed.js';
+const TOKEN_BUDGET = 4096;
+// Approximate token count (rough: 1 token ≈ 4 chars for English, ≈ 1.5 chars for Chinese)
+function estimateTokens(text) {
+    const chineseChars = (text.match(/[\u4e00-\u9fff]/g) ?? []).length;
+    const otherChars = text.length - chineseChars;
+    return Math.ceil(chineseChars / 1.5 + otherChars / 4);
+}
+/**
+ * Trim scored results to fit within a token budget, prioritizing higher layers.
+ */
+function trimToTokenBudget(scored, budget) {
+    const layerBudgets = {
+        1: Math.floor(budget * 0.40), // Mental Models — 40%
+        2: Math.floor(budget * 0.35), // Observations — 35%
+        3: Math.floor(budget * 0.20), // Engrams — 20%
+        4: Math.floor(budget * 0.05), // Episodes — 5%
+    };
+    const layerMap = {
+        mental_model: 1,
+        observation: 2,
+        raw: 3,
+        experience: 4,
+    };
+    const selected = [];
+    const usedTokens = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    for (const { memory } of scored) {
+        const layer = layerMap[memory.layer] ?? 3;
+        const tokens = estimateTokens(memory.statement);
+        if (usedTokens[layer] + tokens <= layerBudgets[layer]) {
+            selected.push(memory);
+            usedTokens[layer] += tokens;
+        }
+    }
+    return selected;
+}
+/**
+ * Format memories into injection text with priority sections.
+ */
+export function formatInjection(memories) {
+    const directives = [];
+    const constraints = [];
+    const consider = [];
+    for (const mem of memories) {
+        const line = `[${mem.id}] ${mem.statement}`;
+        if (mem.layer === 'mental_model') {
+            directives.push(line);
+        }
+        else if (mem.layer === 'observation') {
+            constraints.push(line);
+        }
+        else {
+            consider.push(line);
+        }
+    }
+    const sections = [];
+    if (directives.length > 0) {
+        sections.push('### Directives (must follow)\n' + directives.join('\n'));
+    }
+    if (constraints.length > 0) {
+        sections.push('### Constraints\n' + constraints.join('\n'));
+    }
+    if (consider.length > 0) {
+        sections.push('### Consider\n' + consider.join('\n'));
+    }
+    return `<flyupmem-context>\n${sections.join('\n\n')}\n</flyupmem-context>`;
+}
+/**
+ * Unified recall: multi-signal retrieval with RRF fusion + ACT-R activation + 8-dim rerank.
+ *
+ * Signals (in parallel where possible):
+ * 1. BM25 — keyword matching
+ * 2. Semantic — embedding similarity (if model available)
+ * 3. Graph — entity + link expansion (from BM25 seeds)
+ * 4. Temporal — time-window + BFS diffusion
+ * 5. Activation — ACT-R decay model
+ *
+ * Pipeline:
+ * BM25 + Semantic + Temporal (parallel) → Graph (from BM25 seeds) → RRF fusion → ACT-R weighting → Rerank → Token trim
+ */
+export async function unifiedRecall(query, store, tokenBudget = TOKEN_BUDGET, queryScope) {
+    const allMemories = store.allMemories();
+    const documents = allMemories.map(m => ({ id: m.id, text: m.statement }));
+    // ─── Signal 1: BM25 (always available) ──────────────────────
+    const bm25Results = bm25Search(query, documents, 30);
+    // ─── Signal 2: Semantic (if embedding model loaded) ─────────
+    let semanticResults = [];
+    if (isEmbeddingAvailable()) {
+        semanticResults = await semanticSearch(query, allMemories, 30);
+    }
+    // ─── Signal 3: Temporal ─────────────────────────────────────
+    const temporalResults = temporalSearch(query, allMemories, store.graph, undefined, 30);
+    // ─── Signal 4: Graph expansion (from BM25 top seeds) ────────
+    const seedIds = bm25Results.slice(0, 10).map(r => r.id);
+    const graphResults = graphExpansion(seedIds, allMemories, store.graph, 30);
+    // ─── RRF Fusion ─────────────────────────────────────────────
+    const signalLists = [bm25Results, temporalResults, graphResults];
+    if (semanticResults.length > 0)
+        signalLists.push(semanticResults);
+    const fused = rrfMerge(signalLists);
+    // ─── ACT-R activation weighting ─────────────────────────────
+    const withActivation = fused.map(({ id, score: rrfScore }) => {
+        const mem = allMemories.find(m => m.id === id);
+        if (!mem)
+            return { id, score: rrfScore, memory: null };
+        const activation = computeActivation(mem.activation, mem.layer, mem.emotional_weight ?? 5);
+        return {
+            id,
+            score: rrfScore * 0.7 + activation * 0.3,
+            memory: mem,
+        };
+    }).filter(r => r.memory !== null);
+    // ─── 8-dim Local Rerank ─────────────────────────────────────
+    const reranked = localRerank(withActivation.map(r => ({ memory: r.memory, relevanceScore: r.score })), queryScope ?? null);
+    // ─── Resolve memories and trim to token budget ──────────────
+    const final = reranked
+        .map(({ id, score }) => {
+        const mem = allMemories.find(m => m.id === id);
+        return mem ? { memory: mem, score } : null;
+    })
+        .filter((r) => r !== null);
+    const trimmed = trimToTokenBudget(final, tokenBudget);
+    const injection = formatInjection(trimmed);
+    return { memories: trimmed, injection };
+}
+//# sourceMappingURL=recall.js.map

@@ -1,6 +1,6 @@
 // src/lifecycle/graph-maintain.ts — Automatic graph maintenance
 
-import type { Memory, GraphData, Entity, AssociationType } from '../core/types.js'
+import type { Memory } from '../core/types.js'
 import type { FlyupMemStore } from '../core/store.js'
 
 /**

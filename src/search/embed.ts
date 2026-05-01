@@ -1,6 +1,5 @@
 // src/search/embed.ts — Embedding computation via BGE-small-zh ONNX
 
-import type { Memory } from '../core/types.js'
 
 let pipeline: any = null
 let embedder: any = null

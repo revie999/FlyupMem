@@ -3,7 +3,6 @@
 import type { Engram, MemoryType, Polarity } from '../core/types.js'
 import type { LLMClient } from './llm-client.js'
 import { generateId, nextSequence } from '../core/id.js'
-import { contentHash } from '../core/hash.js'
 
 const EXTRACT_SYSTEM_PROMPT = `You are a knowledge extraction engine. Extract structured facts from the conversation below.
 

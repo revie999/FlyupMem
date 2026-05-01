@@ -1,6 +1,6 @@
 // src/enhance/reflect.ts — Reflect: synthesize Mental Models from Observations
 
-import type { Observation, MentalModel, Memory } from '../core/types.js'
+import type { Observation, MentalModel } from '../core/types.js'
 import type { LLMClient } from './llm-client.js'
 import type { FlyupMemStore } from '../core/store.js'
 import { generateId } from '../core/id.js'
