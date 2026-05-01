@@ -93,6 +93,20 @@ class HermesPluginBoundaryTest(unittest.TestCase):
         self.assertEqual(provider.calls[0][0], "learn")
         self.assertIn("记住：主人偏好直接给结论。", provider.calls[0][1])
         self.assertNotIn("dogfood marker", provider.calls[0][1])
+    def test_flyup_recall_schema_exposes_explain_flag(self):
+        provider = RecordingProvider()
+
+        recall_schema = next(schema for schema in provider.get_tool_schemas() if schema["name"] == "flyup_recall")
+
+        self.assertIn("explain", recall_schema["parameters"]["properties"])
+        self.assertEqual(recall_schema["parameters"]["properties"]["explain"]["type"], "boolean")
+
+    def test_flyup_recall_explain_invokes_cli_flag(self):
+        provider = RecordingProvider()
+
+        provider.handle_tool_call("flyup_recall", {"query": "marker", "explain": True})
+
+        self.assertEqual(provider.calls[0], ("recall", "marker", "--explain"))
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { FlyupMemStore } from '../core/store.js'
 import { flyupLearn } from '../tools/flyup_learn.js'
-import { flyupRecall } from '../tools/flyup_recall.js'
+import { flyupRecall, flyupRecallExplain } from '../tools/flyup_recall.js'
 import { flyupFeedback } from '../tools/flyup_feedback.js'
 import { flyupStatus } from '../tools/flyup_status.js'
 import { flyupMaintain } from '../tools/flyup_maintain.js'
@@ -49,15 +49,20 @@ function createServer(): McpServer {
     {
       query: z.string().describe('Search query'),
       token_budget: z.number().optional().default(2048).describe('Max tokens for injection'),
+      explain: z.boolean().optional().default(false).describe('Return structured recall diagnostics and per-signal scores'),
     },
-    async ({ query, token_budget }) => {
+    async ({ query, token_budget, explain }) => {
       store.load()
       await initEmbedder()
-      const result = await flyupRecall(query, store, token_budget)
+      const result = explain
+        ? await flyupRecallExplain(query, store, token_budget)
+        : await flyupRecall(query, store, token_budget)
       return {
         content: [{
           type: 'text' as const,
-          text: result.injection || '<flyupmem-context>\n(no relevant memories found)\n</flyupmem-context>',
+          text: explain
+            ? JSON.stringify(result, null, 2)
+            : result.injection || '<flyupmem-context>\n(no relevant memories found)\n</flyupmem-context>',
         }],
       }
     },

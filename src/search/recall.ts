@@ -5,13 +5,62 @@ import type { FlyupMemStore } from '../core/store.js'
 import { bm25Search } from './bm25.js'
 import { semanticSearch } from './semantic.js'
 import { graphExpansion } from './graph.js'
-import { temporalSearch, extractTimeReference } from './temporal.js'
+import { temporalSearch } from './temporal.js'
 import { rrfMerge } from './rrf.js'
 import { localRerank } from './rerank.js'
 import { computeActivation } from '../lifecycle/decay.js'
 import { isEmbeddingAvailable } from './embed.js'
 
-const TOKEN_BUDGET = 4096
+export interface SignalExplanation {
+  matched: boolean
+  available?: boolean
+  score?: number
+  rank?: number
+}
+
+export interface RecallExplanation {
+  memory_id: string
+  statement: string
+  matched: boolean
+  signals: {
+    bm25: SignalExplanation
+    semantic: SignalExplanation
+    temporal: SignalExplanation
+    graph: SignalExplanation
+  }
+  scores: {
+    rrf: number
+    activation: number
+    activation_weighted: number
+    rerank: number
+  }
+  reason: string
+}
+
+export interface RecallDiagnostics {
+  query: string
+  corpus_size: number
+  semantic_available: boolean
+  signal_counts: {
+    bm25: number
+    semantic: number
+    temporal: number
+    graph: number
+    fused: number
+    reranked: number
+    injected: number
+  }
+  no_results_reason?: string
+}
+
+export interface RecallWithExplanationResult {
+  memories: Memory[]
+  injection: string
+  explanations: RecallExplanation[]
+  diagnostics: RecallDiagnostics
+}
+
+const TOKEN_BUDGET=2048
 
 // Approximate token count (rough: 1 token ≈ 4 chars for English, ≈ 1.5 chars for Chinese)
 function estimateTokens(text: string): number {
@@ -106,21 +155,42 @@ export function formatInjection(memories: Memory[]): string {
  * Pipeline:
  * BM25 + Semantic + Temporal (parallel) → Graph (from BM25 seeds) → RRF fusion → ACT-R weighting → Rerank → Token trim
  */
-export async function unifiedRecall(
+function signalFor(id: string, results: ScoredResult[], available = true): SignalExplanation {
+  const index = results.findIndex(r => r.id === id)
+  if (index === -1) return { matched: false, available }
+  return {
+    matched: true,
+    available,
+    score: results[index].score,
+    rank: index + 1,
+  }
+}
+
+function buildReason(signals: RecallExplanation['signals']): string {
+  const matched = Object.entries(signals)
+    .filter(([, signal]) => signal.matched)
+    .map(([name]) => name)
+  return matched.length > 0
+    ? `Matched retrieval signals: ${matched.join(', ')}`
+    : 'No retrieval signals matched'
+}
+
+export async function recallWithExplanation(
   query: string,
   store: FlyupMemStore,
   tokenBudget = TOKEN_BUDGET,
   queryScope?: string | null,
-): Promise<{ memories: Memory[]; injection: string }> {
+): Promise<RecallWithExplanationResult> {
   const allMemories = store.allMemories()
   const documents = allMemories.map(m => ({ id: m.id, text: m.statement }))
+  const semanticAvailable = isEmbeddingAvailable()
 
   // ─── Signal 1: BM25 (always available) ──────────────────────
   const bm25Results = bm25Search(query, documents, 30)
 
   // ─── Signal 2: Semantic (if embedding model loaded) ─────────
   let semanticResults: ScoredResult[] = []
-  if (isEmbeddingAvailable()) {
+  if (semanticAvailable) {
     semanticResults = await semanticSearch(query, allMemories, 30)
   }
 
@@ -136,8 +206,11 @@ export async function unifiedRecall(
   if (semanticResults.length > 0) signalLists.push(semanticResults)
 
   const fused = rrfMerge(signalLists)
+  const fusedById = new Map(fused.map(r => [r.id, r.score]))
 
   // ─── ACT-R activation weighting ─────────────────────────────
+  const activationById = new Map<string, number>()
+  const activationWeightedById = new Map<string, number>()
   const withActivation = fused.map(({ id, score: rrfScore }) => {
     const mem = allMemories.find(m => m.id === id)
     if (!mem) return { id, score: rrfScore, memory: null as any }
@@ -146,9 +219,12 @@ export async function unifiedRecall(
       mem.layer as any,
       mem.emotional_weight ?? 5,
     )
+    const activationWeighted = rrfScore * 0.7 + activation * 0.3
+    activationById.set(id, activation)
+    activationWeightedById.set(id, activationWeighted)
     return {
       id,
-      score: rrfScore * 0.7 + activation * 0.3,
+      score: activationWeighted,
       memory: mem,
     }
   }).filter(r => r.memory !== null)
@@ -158,6 +234,7 @@ export async function unifiedRecall(
     withActivation.map(r => ({ memory: r.memory, relevanceScore: r.score })),
     queryScope ?? null,
   )
+  const rerankById = new Map(reranked.map(r => [r.id, r.score]))
 
   // ─── Resolve memories and trim to token budget ──────────────
   const final = reranked
@@ -170,5 +247,57 @@ export async function unifiedRecall(
   const trimmed = trimToTokenBudget(final, tokenBudget)
   const injection = formatInjection(trimmed)
 
-  return { memories: trimmed, injection }
+  const explanations = trimmed.map((mem): RecallExplanation => {
+    const signals = {
+      bm25: signalFor(mem.id, bm25Results),
+      semantic: signalFor(mem.id, semanticResults, semanticAvailable),
+      temporal: signalFor(mem.id, temporalResults),
+      graph: signalFor(mem.id, graphResults),
+    }
+    return {
+      memory_id: mem.id,
+      statement: mem.statement,
+      matched: true,
+      signals,
+      scores: {
+        rrf: fusedById.get(mem.id) ?? 0,
+        activation: activationById.get(mem.id) ?? 0,
+        activation_weighted: activationWeightedById.get(mem.id) ?? 0,
+        rerank: rerankById.get(mem.id) ?? 0,
+      },
+      reason: buildReason(signals),
+    }
+  })
+
+  const diagnostics: RecallDiagnostics = {
+    query,
+    corpus_size: allMemories.length,
+    semantic_available: semanticAvailable,
+    signal_counts: {
+      bm25: bm25Results.length,
+      semantic: semanticResults.length,
+      temporal: temporalResults.length,
+      graph: graphResults.length,
+      fused: fused.length,
+      reranked: reranked.length,
+      injected: trimmed.length,
+    },
+  }
+  if (trimmed.length === 0) {
+    diagnostics.no_results_reason = fused.length === 0
+      ? 'No retrieval signals matched this query.'
+      : 'Retrieval candidates were filtered out by token budget or relevance gates.'
+  }
+
+  return { memories: trimmed, injection, explanations, diagnostics }
+}
+
+export async function unifiedRecall(
+  query: string,
+  store: FlyupMemStore,
+  tokenBudget = TOKEN_BUDGET,
+  queryScope?: string | null,
+): Promise<{ memories: Memory[]; injection: string }> {
+  const result = await recallWithExplanation(query, store, tokenBudget, queryScope)
+  return { memories: result.memories, injection: result.injection }
 }

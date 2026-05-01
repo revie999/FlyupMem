@@ -3,7 +3,7 @@
 
 import { FlyupMemStore } from './core/store.js'
 import { flyupLearn } from './tools/flyup_learn.js'
-import { flyupRecall } from './tools/flyup_recall.js'
+import { flyupRecall, flyupRecallExplain } from './tools/flyup_recall.js'
 import { flyupStatus } from './tools/flyup_status.js'
 import { flyupFeedback } from './tools/flyup_feedback.js'
 import { flyupMaintain } from './tools/flyup_maintain.js'
@@ -14,8 +14,8 @@ import { initEmbedder } from './search/embed.js'
 // Re-export Phase 1-3
 export { FlyupMemStore } from './core/store.js'
 export type * from './core/types.js'
-export { flyupLearn, flyupRecall, flyupStatus, flyupFeedback, flyupMaintain }
-export { unifiedRecall, formatInjection } from './search/recall.js'
+export { flyupLearn, flyupRecall, flyupRecallExplain, flyupStatus, flyupFeedback, flyupMaintain }
+export { unifiedRecall, recallWithExplanation, formatInjection } from './search/recall.js'
 export { extractEngramsFromTurn } from './lifecycle/extract.js'
 export { bm25Search } from './search/bm25.js'
 export { tokenize } from './search/tokenize.js'
@@ -71,8 +71,14 @@ async function main() {
         process.exit(1)
       }
       await initEmbedder()
-      const result = await flyupRecall(query, store)
-      console.log(result.injection)
+      const explain = args.includes('--explain') || args.includes('-x')
+      if (explain) {
+        const result = await flyupRecallExplain(query, store)
+        console.log(JSON.stringify(result, null, 2))
+      } else {
+        const result = await flyupRecall(query, store)
+        console.log(result.injection)
+      }
       break
     }
 
@@ -142,7 +148,7 @@ async function main() {
 
 Usage:
   flyupmem learn "<user message>" ["<assistant message>"]
-  flyupmem recall "<query>"
+  flyupmem recall "<query>" [--explain]
   flyupmem status
   flyupmem feedback <memory-id> <positive|negative|neutral>
   flyupmem maintain                          # Decay + consolidation + graph

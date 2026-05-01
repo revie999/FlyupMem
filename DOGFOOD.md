@@ -2,6 +2,49 @@
 
 ## 2026-05-01 — Hermes MemoryProvider 接入验证
 
+### 2026-05-01 — Recall explain/debug mode
+
+在完成召回质量门禁后，继续增加可调试性：以前只能看到“召回/不召回”和最终 injection，无法判断是哪一路信号导致命中，也无法快速定位误召回/漏召回。
+
+处理结果：
+
+- 新增内部 API：`recallWithExplanation(query, store)`。
+- 新增工具 API：`flyupRecallExplain(...)`。
+- CLI 支持：`flyupmem recall "<query>" --explain`，输出结构化 JSON。
+- Hermes MemoryProvider 工具 schema 支持 `flyup_recall({ query, explain: true })`。
+- MCP `flyup_recall` 支持 `explain: true`。
+- explain JSON 包含：
+  - `injection` / `count`
+  - `explanations[]`
+  - 每条记忆的 `signals.bm25|semantic|temporal|graph`
+  - 每路信号的 `matched` / `available` / `score` / `rank`
+  - `scores.rrf` / `activation` / `activation_weighted` / `rerank`
+  - `reason`
+  - `diagnostics.signal_counts`
+  - 空结果 `diagnostics.no_results_reason`
+
+验证：
+
+```bash
+npm run test:ts -- tests/recall.test.ts
+python3 -m unittest tests/hermes_plugin_boundary_test.py -v
+npm test
+npm run build
+```
+
+结果：
+
+- `tests/recall.test.ts`: 7 passed
+- Hermes plugin boundary unittest：6 passed
+- 全量 Vitest：17 files / 99 tests passed
+- `npm test`: passed
+- `tsc` build passed
+
+真实 CLI dogfood 使用临时 store 验证：
+
+- related query `explain-dogfood-20260501`：返回 1 条记忆，explain 显示 `bm25` + `semantic` 命中，并给出 RRF/activation/rerank 分数。
+- unrelated query `蓝色长颈鹿火星煮咖啡 7f3a9z`：返回 0 条记忆，`no_results_reason` 为 `No retrieval signals matched this query.`。
+
 ### 2026-05-01 — Recall 质量门禁：避免无关查询注入唯一记忆
 
 继续 dogfood 时发现一个召回质量问题：当 store 里只有 1 条记忆时，无关查询也可能被注入。根因有两层：

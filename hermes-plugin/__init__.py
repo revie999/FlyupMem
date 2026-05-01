@@ -186,6 +186,11 @@ class FlyupMemProvider(MemoryProvider):
                             "type": "string",
                             "description": "Search query to find relevant memories",
                         },
+                        "explain": {
+                            "type": "boolean",
+                            "description": "Return structured recall diagnostics and per-signal scores instead of injection text only",
+                            "default": False,
+                        },
                     },
                     "required": ["query"],
                 },
@@ -235,7 +240,10 @@ class FlyupMemProvider(MemoryProvider):
         try:
             if tool_name == "flyup_recall":
                 query = args.get("query", "")
-                result = self._run_cli("recall", query)
+                cli_args = ["recall", query]
+                if args.get("explain"):
+                    cli_args.append("--explain")
+                result = self._run_cli(*cli_args)
                 return result or "<flyupmem-context>\n(no relevant memories)\n</flyupmem-context>"
 
             elif tool_name == "flyup_learn":
