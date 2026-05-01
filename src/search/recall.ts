@@ -1,9 +1,15 @@
-// src/search/recall.ts — Unified recall pipeline (Phase 1: BM25 only)
+// src/search/recall.ts — Unified recall pipeline (Phase 2: multi-signal)
 
 import type { Memory, ScoredResult } from '../core/types.js'
 import type { FlyupMemStore } from '../core/store.js'
 import { bm25Search } from './bm25.js'
+import { semanticSearch, isSemanticAvailable } from './semantic.js'
+import { graphExpansion } from './graph.js'
+import { temporalSearch, extractTimeReference } from './temporal.js'
+import { rrfMerge } from './rrf.js'
+import { localRerank } from './rerank.js'
 import { computeActivation } from '../lifecycle/decay.js'
+import { isEmbeddingAvailable } from './embed.js'
 
 const TOKEN_BUDGET = 4096
 
@@ -84,38 +90,80 @@ export function formatInjection(memories: Memory[]): string {
 }
 
 /**
- * Unified recall: BM25 search + ACT-R activation weighting.
- * Phase 1 only; Phase 2 will add semantic, graph, temporal signals.
+ * Unified recall: multi-signal retrieval with RRF fusion + ACT-R activation + 8-dim rerank.
+ *
+ * Signals (in parallel where possible):
+ * 1. BM25 — keyword matching
+ * 2. Semantic — embedding similarity (if model available)
+ * 3. Graph — entity + link expansion (from BM25 seeds)
+ * 4. Temporal — time-window + BFS diffusion
+ * 5. Activation — ACT-R decay model
+ *
+ * Pipeline:
+ * BM25 + Semantic + Temporal (parallel) → Graph (from BM25 seeds) → RRF fusion → ACT-R weighting → Rerank → Token trim
  */
 export async function unifiedRecall(
   query: string,
   store: FlyupMemStore,
   tokenBudget = TOKEN_BUDGET,
+  queryScope?: string | null,
 ): Promise<{ memories: Memory[]; injection: string }> {
   const allMemories = store.allMemories()
-
-  // BM25 search
   const documents = allMemories.map(m => ({ id: m.id, text: m.statement }))
+
+  // ─── Signal 1: BM25 (always available) ──────────────────────
   const bm25Results = bm25Search(query, documents, 30)
 
-  // ACT-R activation weighting
-  const final: Array<{ memory: Memory; score: number }> = bm25Results.map(({ id, score: bm25Score }) => {
-    const mem = allMemories.find(m => m.id === id)!
+  // ─── Signal 2: Semantic (if embedding model loaded) ─────────
+  let semanticResults: ScoredResult[] = []
+  if (isEmbeddingAvailable()) {
+    semanticResults = await semanticSearch(query, allMemories, 30)
+  }
+
+  // ─── Signal 3: Temporal ─────────────────────────────────────
+  const temporalResults = temporalSearch(query, allMemories, store.graph, undefined, 30)
+
+  // ─── Signal 4: Graph expansion (from BM25 top seeds) ────────
+  const seedIds = bm25Results.slice(0, 10).map(r => r.id)
+  const graphResults = graphExpansion(seedIds, allMemories, store.graph, 30)
+
+  // ─── RRF Fusion ─────────────────────────────────────────────
+  const signalLists = [bm25Results, temporalResults, graphResults]
+  if (semanticResults.length > 0) signalLists.push(semanticResults)
+
+  const fused = rrfMerge(signalLists)
+
+  // ─── ACT-R activation weighting ─────────────────────────────
+  const withActivation = fused.map(({ id, score: rrfScore }) => {
+    const mem = allMemories.find(m => m.id === id)
+    if (!mem) return { id, score: rrfScore, memory: null as any }
     const activation = computeActivation(
       mem.activation,
       mem.layer as any,
       mem.emotional_weight ?? 5,
     )
     return {
+      id,
+      score: rrfScore * 0.7 + activation * 0.3,
       memory: mem,
-      score: bm25Score * 0.7 + activation * 0.3,
     }
-  }).sort((a, b) => b.score - a.score)
+  }).filter(r => r.memory !== null)
 
-  // Token budget trimming
+  // ─── 8-dim Local Rerank ─────────────────────────────────────
+  const reranked = localRerank(
+    withActivation.map(r => ({ memory: r.memory, relevanceScore: r.score })),
+    queryScope ?? null,
+  )
+
+  // ─── Resolve memories and trim to token budget ──────────────
+  const final = reranked
+    .map(({ id, score }) => {
+      const mem = allMemories.find(m => m.id === id)
+      return mem ? { memory: mem, score } : null
+    })
+    .filter((r): r is { memory: Memory; score: number } => r !== null)
+
   const trimmed = trimToTokenBudget(final, tokenBudget)
-
-  // Format injection
   const injection = formatInjection(trimmed)
 
   return { memories: trimmed, injection }

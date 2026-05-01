@@ -4,6 +4,7 @@ import { FlyupMemStore } from './core/store.js'
 import { flyupLearn } from './tools/flyup_learn.js'
 import { flyupRecall } from './tools/flyup_recall.js'
 import { flyupStatus } from './tools/flyup_status.js'
+import { initEmbedder } from './search/embed.js'
 
 // Re-export all public API
 export { FlyupMemStore } from './core/store.js'
@@ -16,6 +17,14 @@ export { tokenize } from './search/tokenize.js'
 export { contentHash } from './core/hash.js'
 export { generateId } from './core/id.js'
 export { decayedStrength, computeActivation, reactivate, statusFromStrength } from './lifecycle/decay.js'
+
+// Phase 2 exports
+export { embed, cosineSimilarity, isEmbeddingAvailable, initEmbedder } from './search/embed.js'
+export { semanticSearch, isSemanticAvailable } from './search/semantic.js'
+export { graphExpansion } from './search/graph.js'
+export { temporalSearch, extractTimeReference } from './search/temporal.js'
+export { rrfMerge } from './search/rrf.js'
+export { localRerank } from './search/rerank.js'
 
 // ─── CLI ──────────────────────────────────────────────────────
 async function main() {
@@ -42,6 +51,8 @@ async function main() {
         console.error('Usage: flyupmem recall "<query>"')
         process.exit(1)
       }
+      // Try to init embedding model (best effort)
+      await initEmbedder()
       const result = await flyupRecall(query, store)
       console.log(result.injection)
       break
@@ -53,13 +64,21 @@ async function main() {
       break
     }
 
+    case 'embed-init': {
+      console.log('Initializing embedding model...')
+      const ok = await initEmbedder()
+      console.log(ok ? '✓ Embedding model ready' : '✗ Embedding model unavailable')
+      break
+    }
+
     default:
-      console.log(`FlyupMem v0.1.0 — Local-first memory for AI agents
+      console.log(`FlyupMem v0.2.0 — Local-first memory for AI agents
 
 Usage:
   flyupmem learn "<user message>" ["<assistant message>"]
   flyupmem recall "<query>"
-  flyupmem status`)
+  flyupmem status
+  flyupmem embed-init          # Pre-load embedding model`)
   }
 }
 
