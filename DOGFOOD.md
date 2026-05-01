@@ -1,5 +1,40 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-01 — Memory Inspect 工具
+
+增加单条记忆深度检查能力：以前只能看全局 status，无法查看单条记忆的激活度衰减、关联关系和 graph 边。
+
+处理结果：
+
+- 新增 `flyupmem inspect <memory-id> [--json]`：查看单条记忆详情
+  - 普通模式：emoji 格式化输出，一目了然
+  - JSON 模式：结构化数据，适合脚本消费
+  - 显示内容：statement, type, class, polarity, scope, domain, tags
+  - 激活度：原始 retrieval_strength → 当前计算值（含 ACT-R 衰减）
+  - 时间：learned age, last accessed, decay λ
+  - 关联：associations + graph edges（双向）
+  - 反馈：positive/negative/neutral 计数
+- 新增 MCP 工具：`flyup_inspect`
+- 新增 Hermes 工具 schema：`flyup_inspect`
+- 导出类型：InspectResult, MemoryDetail, RelatedMemory, GraphEdgeInfo, FeedbackSummary
+
+验证：
+
+```bash
+npx vitest run tests/inspect.test.ts
+npm test
+npm run build
+node dist/index.js inspect ENG-20260501-001
+node dist/index.js inspect ENG-20260501-001 --json
+```
+
+结果：
+
+- `tests/inspect.test.ts`: 7 passed
+- 全量 Vitest + Hermes plugin: 20 files / 116 tests + 6 plugin tests — all passed
+- `tsc` build passed
+- CLI dogfood：inspect 输出包含 activation、temporal、graph edges、feedback
+
 ### 2026-05-01 — Doctor / Setup / Status CLI 子命令
 
 增加 P5 可观测性工具：以前只有 `flyup_status` 工具 API 返回 JSON，没有独立 CLI 诊断命令，排查问题不方便。

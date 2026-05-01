@@ -11,6 +11,7 @@ import { flyupReflect } from './tools/flyup_reflect.js'
 import { flyupPack } from './tools/flyup_pack.js'
 import { flyupDoctor } from './tools/flyup_doctor.js'
 import { flyupSetup } from './tools/flyup_setup.js'
+import { flyupInspect } from './tools/flyup_inspect.js'
 import { initEmbedder } from './search/embed.js'
 
 // Re-export Phase 1-3
@@ -21,6 +22,8 @@ export { flyupDoctor } from './tools/flyup_doctor.js'
 export type { DoctorResult, DoctorCheck } from './tools/flyup_doctor.js'
 export { flyupSetup } from './tools/flyup_setup.js'
 export type { SetupResult, SetupStep } from './tools/flyup_setup.js'
+export { flyupInspect } from './tools/flyup_inspect.js'
+export type { InspectResult, MemoryDetail, RelatedMemory, GraphEdgeInfo, FeedbackSummary } from './tools/flyup_inspect.js'
 export { unifiedRecall, recallWithExplanation, formatInjection } from './search/recall.js'
 export { extractEngramsFromTurn } from './lifecycle/extract.js'
 export { bm25Search } from './search/bm25.js'
@@ -175,6 +178,55 @@ async function main() {
       break
     }
 
+    case 'inspect': {
+      const memoryId = args[1]
+      if (!memoryId) {
+        console.error('Usage: flyupmem inspect <memory-id> [--json]')
+        process.exit(1)
+      }
+      const result = flyupInspect(memoryId, store)
+      if (!result.found) {
+        console.error(result.error)
+        process.exit(1)
+      }
+      if (args.includes('--json')) {
+        console.log(JSON.stringify(result.memory, null, 2))
+      } else {
+        const m = result.memory!
+        const act = m.activation
+        console.log(`🔍 ${m.id}  (${m.layer} / ${m.status})`)
+        console.log(`\n📄 Statement: ${m.statement}`)
+        if (m.title) console.log(`📝 Title: ${m.title}`)
+        if (m.type) console.log(`🏷  Type: ${m.type} | Class: ${m.memoryClass} | Polarity: ${m.polarity ?? 'null'}`)
+        console.log(`\n📊 Activation`)
+        console.log(`   retrieval_strength: ${act.retrievalStrength.toFixed(3)} → current: ${act.computedActivation.toFixed(3)}`)
+        console.log(`   storage_strength:   ${act.storageStrength.toFixed(3)}`)
+        console.log(`   frequency: ${act.frequency} | decay λ: ${act.effectiveDecay.toFixed(4)}`)
+        console.log(`   layer: ${act.layer} (L${act.layerLevel})`)
+        console.log(`\n⏰ Temporal`)
+        console.log(`   learned:    ${m.learnedAt} (${m.ageDays.toFixed(1)}d ago)`)
+        console.log(`   accessed:   ${m.lastAccessed} (${m.daysSinceAccess.toFixed(1)}d ago)`)
+        console.log(`\n🎯 Meta: confidence=${m.confidence} emotional_weight=${m.emotionalWeight} scope=${m.scope} domain=${m.domain}`)
+        if (m.tags.length) console.log(`🏷  Tags: ${m.tags.join(', ')}`)
+        console.log(`📦 Hash: ${m.contentHash}`)
+        if (m.related.length) {
+          console.log(`\n🔗 Related (${m.related.length})`)
+          for (const r of m.related) {
+            console.log(`   → ${r.id} [${r.relationType} w=${r.weight}] ${r.statement.slice(0, 60)}`)
+          }
+        }
+        if (m.graphEdges.length) {
+          console.log(`\n🕸  Graph edges (${m.graphEdges.length})`)
+          for (const e of m.graphEdges) {
+            const arrow = e.direction === 'outgoing' ? '→' : '←'
+            console.log(`   ${arrow} ${e.otherId} [${e.edgeType} w=${e.weight}]`)
+          }
+        }
+        console.log(`\n💬 Feedback: +${m.feedback.positive} -${m.feedback.negative} ~${m.feedback.neutral}`)
+      }
+      break
+    }
+
     default:
       console.log(`FlyupMem v0.4.0 — Local-first memory for AI agents
 
@@ -190,6 +242,7 @@ Usage:
   flyupmem embed-init                        # Pre-load embedding model
   flyupmem doctor                            # Deep health check
   flyupmem setup [--force]                   # Environment check + store init
+  flyupmem inspect <memory-id> [--json]      # Inspect memory detail & activation
 
 Environment:
   FLYUP_LLM_API_KEY     LLM API key (for reflect/LLM extraction)

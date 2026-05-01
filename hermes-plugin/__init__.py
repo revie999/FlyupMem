@@ -233,6 +233,20 @@ class FlyupMemProvider(MemoryProvider):
                 "description": "Get memory store statistics.",
                 "parameters": {"type": "object", "properties": {}},
             },
+            {
+                "name": "flyup_inspect",
+                "description": "Inspect a single memory by ID: full detail, current activation, related memories, graph edges, and feedback.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "memory_id": {
+                            "type": "string",
+                            "description": "Memory ID (e.g. ENG-20260501-001)",
+                        },
+                    },
+                    "required": ["memory_id"],
+                },
+            },
         ]
 
     def handle_tool_call(self, tool_name: str, args: Dict[str, Any], **kwargs) -> str:
@@ -262,6 +276,10 @@ class FlyupMemProvider(MemoryProvider):
             elif tool_name == "flyup_status":
                 result = self._run_cli("status")
                 return result or "{}"
+            elif tool_name == "flyup_inspect":
+                memory_id = args.get("memory_id", "")
+                result = self._run_cli("inspect", memory_id, "--json")
+                return result or '{"error": "Memory not found"}'
 
             else:
                 return json.dumps({"error": f"Unknown tool: {tool_name}"})

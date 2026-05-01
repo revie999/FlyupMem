@@ -11,6 +11,7 @@ import { flyupStatus } from '../tools/flyup_status.js'
 import { flyupMaintain } from '../tools/flyup_maintain.js'
 import { flyupReflect } from '../tools/flyup_reflect.js'
 import { flyupPack } from '../tools/flyup_pack.js'
+import { flyupInspect } from '../tools/flyup_inspect.js'
 import { initEmbedder } from '../search/embed.js'
 
 const store = new FlyupMemStore()
@@ -205,6 +206,30 @@ function createServer(): McpServer {
         content: [{
           type: 'text' as const,
           text: result.details,
+        }],
+      }
+    },
+  )
+
+  // ─── flyup_inspect ──────────────────────────────────────────
+  server.tool(
+    'flyup_inspect',
+    'Inspect a single memory by ID: full detail, current activation, related memories, graph edges, and feedback.',
+    {
+      memory_id: z.string().describe('Memory ID (e.g. ENG-20260501-001)'),
+    },
+    async ({ memory_id }) => {
+      store.load()
+      const result = flyupInspect(memory_id, store)
+      if (!result.found) {
+        return {
+          content: [{ type: 'text' as const, text: result.error ?? 'Memory not found' }],
+        }
+      }
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(result.memory, null, 2),
         }],
       }
     },
