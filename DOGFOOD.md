@@ -1,5 +1,28 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-02 — Real Store Git Sync Bootstrap ⚠️ PARTIAL
+
+**真实 store：** `~/.flyupmem`
+
+**已完成：**
+- 清理上次 dogfood 残留的 `FLYUPMEM_STORE_PATH` 干扰后，确认真实默认 store 为 `~/.flyupmem`。
+- 对真实 store 执行 `sync init`，初始化本地 Git 仓库。
+- 执行 `sync push`，完成本地首个 sync commit。
+- 验证 working tree clean。
+- 验证 tracked files 仅包含 `.gitignore` 与 YAML 源数据：`engrams.yaml`、`episodes.yaml`、`feedback.yaml`、`graph.yaml`、`mental-models.yaml`、`observations.yaml`。
+- 验证 `index.sqlite` 被 `.gitignore` 忽略，未被跟踪。
+
+**阻塞：**
+- 远端私有仓库 `revie999/flyupmem-store-private` 不存在。
+- 当前 GitHub fine-grained PAT 无 `createRepository` 权限，`gh repo create` 返回 `Resource not accessible by personal access token (createRepository)`。
+- 因此没有把真实记忆数据推送到任何远端；当前仅完成本地 Git bootstrap。
+
+**下一步：**
+- 主人在 GitHub 上手动创建私有 repo，或给 PAT 增加创建仓库权限。
+- 然后执行 `flyupmem sync init <remote>` + `flyupmem sync push` 完成远端同步。
+
+---
+
 ### 2026-05-02 — Git Sync MVP Dogfood ✅ PASS
 
 **新增能力：**
