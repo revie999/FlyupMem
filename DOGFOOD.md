@@ -1,5 +1,35 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-02 — v0.5.1 Hermes Dogfood 验证
+
+**验证环境：** Gateway PID 78716，Hermes provider: flyupmem (active)
+
+**✅ 通过的验证项：**
+1. `hermes memory status` 显示 flyupmem 为 active provider
+2. CLI `learn` → 写入成功（提取 1 条，存入 1 条）
+3. CLI `recall` → 返回相关记忆（6 条匹配）
+4. SQLite FTS5 缓存自动同步（7→8 fts, 15→18 vec）
+5. `removeEngram` → 从 YAML + SQLite 双删
+6. Health check 全绿
+7. index.sqlite 已生成（204KB → 232KB）
+
+**🐛 发现的问题：**
+- 2 条污染记忆（`ENG-20260502-001` CLI 输出 + `ENG-20260502-002` 回复碎片）
+- 根因：v0.5.1 之前的 extract 规则会匹配 CLI 输出和短回复
+- 已清理：手动 `removeEngram` 删除 2 条污染条目
+
+**📊 清理后状态：**
+- 5 engrams (2 active, 3 candidate)
+- 1 observation
+- SQLite: 6 fts, 6 meta, 16 vec, 232KB
+
+**⚠️ 待观察：**
+- Hermes `sync_turn` 自动学习是否还会产生污染（需要在 Telegram 真实对话中观察几轮）
+- SQLite 缓存重建是否在 Gateway 重启后正常工作
+- 嵌入向量缓存命中率
+
+---
+
 ### 2026-05-02 — v0.5.0 SQLite FTS5 缓存 + 嵌入向量缓存 + 性能基准
 
 **SQLite FTS5 缓存层（src/core/sqlite-cache.ts）**
