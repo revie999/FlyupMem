@@ -80,6 +80,27 @@ describe('extractEngramsFromTurn', () => {
     expect(results[0].statement).not.toContain('dogfood marker')
   })
 
+  it('ignores Telegram reply previews before user short replies', () => {
+    const results = extractEngramsFromTurn(
+      `[Replying to: "主人，我建议下一步不要急着堆 Phase 5 功能，先做 A：真实 Hermes dogfood + 修集成问题。"]
+继续`,
+      '好的，继续',
+    )
+    expect(results).toEqual([])
+  })
+
+  it('strips Telegram reply previews while keeping explicit user memory after them', () => {
+    const results = extractEngramsFromTurn(
+      `[Replying to: "主人，我建议下一步不要急着堆 Phase 5 功能，先做 A：真实 Hermes dogfood + 修集成问题。"]
+记住：主人偏好先 dogfood 再做新功能。`,
+      '好的',
+    )
+    expect(results).toHaveLength(1)
+    expect(results[0].statement).toContain('主人偏好先 dogfood 再做新功能')
+    expect(results[0].statement).not.toContain('Phase 5')
+    expect(results[0].source.quote).not.toContain('Replying to')
+  })
+
   it('generates unique IDs', () => {
     const results = extractEngramsFromTurn(
       '以后都用 Vitest 不用 Jest',

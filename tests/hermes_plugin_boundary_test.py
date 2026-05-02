@@ -42,6 +42,25 @@ EXPLICIT_WITH_CONTEXT = """记住：主人偏好直接给结论。
 </flyupmem-context>
 </memory-context>"""
 
+REPLY_CONTEXT_ONLY = """[Replying to: \"主人，我建议下一步不要急着堆 Phase 5 功能，先做 A：真实 Hermes dogfood + 修集成问题。
+
+原因很直接：
+
+FlyupMem 现在已经有：
+- 核心存储 ✅
+- 多路检索 ✅
+- SQLite/向量缓存 ✅
+- CLI 工具 ✅
+- Hermes 插件 ✅
+- MCP/OpenClaw 雏形 ✅
+- 测试和基准 ✅
+
+但它还缺一个最关键验证：\"]
+继续"""
+
+EXPLICIT_WITH_REPLY_CONTEXT = """[Replying to: \"主人，我建议下一步不要急着堆 Phase 5 功能，先做 A：真实 Hermes dogfood + 修集成问题。\"]
+记住：主人偏好先 dogfood 再做新功能。"""
+
 
 class RecordingProvider(plugin.FlyupMemProvider):
     def __init__(self):
@@ -93,6 +112,27 @@ class HermesPluginBoundaryTest(unittest.TestCase):
         self.assertEqual(provider.calls[0][0], "learn")
         self.assertIn("记住：主人偏好直接给结论。", provider.calls[0][1])
         self.assertNotIn("dogfood marker", provider.calls[0][1])
+
+    def test_sync_turn_does_not_learn_telegram_reply_preview_only(self):
+        provider = RecordingProvider()
+
+        provider.sync_turn(REPLY_CONTEXT_ONLY, "继续")
+        time.sleep(0.2)
+
+        self.assertEqual(provider.calls, [])
+
+    def test_sync_turn_strips_telegram_reply_preview_before_learning(self):
+        provider = RecordingProvider()
+
+        provider.sync_turn(EXPLICIT_WITH_REPLY_CONTEXT, "好的")
+        time.sleep(0.2)
+
+        self.assertEqual(len(provider.calls), 1)
+        self.assertEqual(provider.calls[0][0], "learn")
+        self.assertIn("记住：主人偏好先 dogfood 再做新功能。", provider.calls[0][1])
+        self.assertNotIn("Phase 5", provider.calls[0][1])
+        self.assertNotIn("Replying to", provider.calls[0][1])
+
     def test_flyup_recall_schema_exposes_explain_flag(self):
         provider = RecordingProvider()
 

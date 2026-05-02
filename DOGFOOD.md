@@ -28,6 +28,14 @@
 - SQLite 缓存重建是否在 Gateway 重启后正常工作
 - 嵌入向量缓存命中率
 
+**2026-05-02 追加观察：Telegram reply preview 污染**
+- 现象：真实 Telegram dogfood 中发现 `ENG-20260502-004`，内容来自 `[Replying to: "..."]` 引用预览，而不是用户新输入
+- 根因：Hermes Telegram 网关会把回复引用预览拼进 `user_content`；既有 `stripInjectedMemoryContext()` 只剥离 memory-context / flyupmem-context / System note，没有剥离 Telegram reply preview
+- 修复：TypeScript extractor 与 Python Hermes provider 均剥离开头的 `[Replying to: "..."]` block
+- 回归测试：新增 2 个 TS extractor 测试 + 2 个 Python provider boundary 测试
+- 清理：已删除污染记忆 `ENG-20260502-004`，SQLite 同步删除
+- 验证：`npm test` 23 files / 166 tests 全绿；Hermes plugin 8 tests 全绿；`npm run build` 通过；live status 为 4 engrams / 1 observation / health ok
+
 ---
 
 ### 2026-05-02 — v0.5.0 SQLite FTS5 缓存 + 嵌入向量缓存 + 性能基准

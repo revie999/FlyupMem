@@ -65,7 +65,8 @@ def strip_injected_memory_context(text: Any) -> str:
     """Remove recalled/system-injected memory blocks before learning."""
     if not isinstance(text, str):
         return ""
-    cleaned = re.sub(r"<memory-context>[\s\S]*?</memory-context>", "", text, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^\s*\[Replying to:\s*[\"“][\s\S]*?[\"”]\]\s*", "", text)
+    cleaned = re.sub(r"<memory-context>[\s\S]*?</memory-context>", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"<flyupmem-context>[\s\S]*?</flyupmem-context>", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"\[System note:[\s\S]*?\]\s*", "", cleaned, flags=re.IGNORECASE)
     return cleaned.strip()

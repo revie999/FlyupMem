@@ -25,6 +25,7 @@ function isMetaInstructionPollution(text: string): boolean {
 
 function stripInjectedMemoryContext(text: string): string {
   return text
+    .replace(/^\s*\[Replying to:\s*["“][\s\S]*?["”]\]\s*/g, '')
     .replace(/<memory-context>[\s\S]*?<\/memory-context>/gi, '')
     .replace(/<flyupmem-context>[\s\S]*?<\/flyupmem-context>/gi, '')
     .replace(/\[System note:[\s\S]*?\]\s*/gi, '')
