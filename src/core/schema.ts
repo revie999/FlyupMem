@@ -18,6 +18,7 @@ export const ActivationSchema = z.object({
   retrieval_strength: z.number().min(0).max(1),
   storage_strength: z.number().min(0).max(1),
   frequency: z.number().int().min(0),
+  turn_count: z.number().int().min(0).default(0),
   last_accessed: z.string(), // ISO date
 })
 

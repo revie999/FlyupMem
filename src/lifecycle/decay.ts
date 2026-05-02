@@ -47,7 +47,7 @@ export function statusFromStrength(strength: number): string {
 }
 
 /**
- * Compute current activation score (retrieval strength + frequency boost).
+ * Compute current activation score (retrieval strength + frequency boost + turn count boost).
  */
 export function computeActivation(
   activation: Activation,
@@ -60,7 +60,48 @@ export function computeActivation(
 
   const rs = decayedStrength(activation.retrieval_strength, daysSince, layer, emotionalWeight)
   const freqBoost = Math.min(0.2, Math.log1p(activation.frequency) * 0.05)
-  return Math.min(1.0, rs + freqBoost)
+  const turnBoost = Math.min(0.15, Math.log1p(activation.turn_count ?? 0) * 0.04)
+  return Math.min(1.0, rs + freqBoost + turnBoost)
+}
+
+/**
+ * Compute memory quality score.
+ * Higher quality = more useful, more proven, more stable.
+ *
+ * Factors:
+ * - turn_count: log-scaled, capped at 0.30 (proven usefulness)
+ * - decay_ratio: current activation / max possible → penalizes stale memories
+ * - consolidated: Observations get a promotion bonus (+0.15)
+ * - feedback_balance: positive ratio boosts quality
+ */
+export function computeQualityScore(
+  activation: Activation,
+  layer: Layer,
+  emotionalWeight: number = 5,
+  consolidated: boolean = false,
+  feedback?: { positive: number; negative: number; neutral: number },
+): number {
+  // Turn count contribution: proven usefulness
+  const turnScore = Math.min(0.30, Math.log1p(activation.turn_count ?? 0) * 0.08)
+
+  // Decay ratio: how "alive" is this memory
+  const currentActivation = computeActivation(activation, layer, emotionalWeight)
+  const decayRatio = Math.min(1.0, currentActivation)
+
+  // Consolidation promotion
+  const consolidationBonus = consolidated ? 0.15 : 0
+
+  // Feedback balance: positive ratio → quality signal
+  let feedbackScore = 0
+  if (feedback) {
+    const total = feedback.positive + feedback.negative + feedback.neutral
+    if (total > 0) {
+      const positiveRatio = feedback.positive / total
+      feedbackScore = positiveRatio * 0.20 // max 0.20
+    }
+  }
+
+  return Math.min(1.0, turnScore + decayRatio * 0.35 + consolidationBonus + feedbackScore)
 }
 
 /**

@@ -247,6 +247,23 @@ export async function recallWithExplanation(
   const trimmed = trimToTokenBudget(final, tokenBudget)
   const injection = formatInjection(trimmed)
 
+  // ─── Increment turn_count for recalled memories ─────────────
+  const now = new Date().toISOString()
+  const today = now.slice(0, 10)
+  let needsSave = false
+  for (const mem of trimmed) {
+    if ('activation' in mem && mem.activation) {
+      mem.activation.turn_count = (mem.activation.turn_count ?? 0) + 1
+      mem.activation.last_accessed = today
+      // Update in store (engrams have updateEngram; obs/mm are direct refs)
+      if ('consolidated' in mem) {
+        store.updateEngram(mem.id, { activation: mem.activation } as any)
+      }
+      needsSave = true
+    }
+  }
+  if (needsSave) store.save()
+
   const explanations = trimmed.map((mem): RecallExplanation => {
     const signals = {
       bm25: signalFor(mem.id, bm25Results),

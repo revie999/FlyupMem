@@ -125,6 +125,7 @@ export function mergeToObservation(cluster: Engram[]): Observation {
       retrieval_strength: Math.max(...cluster.map(e => e.activation?.retrieval_strength ?? 0.5)),
       storage_strength: Math.max(...cluster.map(e => e.activation?.storage_strength ?? 0.5)),
       frequency: cluster.reduce((s, e) => s + (e.activation?.frequency ?? 1), 0),
+      turn_count: cluster.reduce((s, e) => s + (e.activation?.turn_count ?? 0), 0),
       last_accessed: today,
     },
     emotional_weight: Math.max(...cluster.map(e => e.emotional_weight ?? 5)),

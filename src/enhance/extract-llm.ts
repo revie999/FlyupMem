@@ -101,6 +101,7 @@ export async function extractEngramsLLM(
         retrieval_strength: 0.8,
         storage_strength: 0.5,
         frequency: 1,
+        turn_count: 0,
         last_accessed: today,
       },
       emotional_weight: 5,

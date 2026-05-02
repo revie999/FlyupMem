@@ -25,7 +25,7 @@ function makeMemory(overrides: Partial<Memory> = {}): Memory {
     entities: [],
     temporal: { learned_at: now, valid_from: now, valid_until: null },
     source: { episode_id: null, quote: '', origin: 'test' },
-    activation: { retrieval_strength: 0.8, storage_strength: 1.0, frequency: 5, last_accessed: now.slice(0, 10) },
+    activation: { retrieval_strength: 0.8, storage_strength: 1.0, frequency: 5, turn_count: 0, last_accessed: now.slice(0, 10) },
     emotional_weight: 5,
     confidence: 7,
     content_hash: 'hash-test',
@@ -96,5 +96,59 @@ describe('localRerank', () => {
     for (let i = 1; i < results.length; i++) {
       expect(results[i - 1].score).toBeGreaterThanOrEqual(results[i].score)
     }
+  })
+
+  it('quality dimension boosts high turn_count memories', () => {
+    const memHighTurns = makeMemory({
+      id: 'high-turns',
+      activation: { retrieval_strength: 0.5, storage_strength: 0.5, frequency: 1, turn_count: 20, last_accessed: new Date().toISOString().slice(0, 10) },
+    })
+    const memNoTurns = makeMemory({
+      id: 'no-turns',
+      activation: { retrieval_strength: 0.5, storage_strength: 0.5, frequency: 1, turn_count: 0, last_accessed: new Date().toISOString().slice(0, 10) },
+    })
+
+    const results = localRerank([
+      { memory: memHighTurns, relevanceScore: 0.5 },
+      { memory: memNoTurns, relevanceScore: 0.5 },
+    ])
+
+    expect(results[0].id).toBe('high-turns')
+  })
+
+  it('quality dimension boosts consolidated memories', () => {
+    const memConsolidated = makeMemory({
+      id: 'consolidated',
+      consolidated: true,
+    })
+    const memRaw = makeMemory({
+      id: 'raw',
+      consolidated: false,
+    })
+
+    const results = localRerank([
+      { memory: memConsolidated, relevanceScore: 0.5 },
+      { memory: memRaw, relevanceScore: 0.5 },
+    ])
+
+    expect(results[0].id).toBe('consolidated')
+  })
+
+  it('quality dimension boosts memories with positive feedback', () => {
+    const memPositive = makeMemory({
+      id: 'positive',
+      feedback: { positive: 10, negative: 0, neutral: 0 },
+    })
+    const memNegative = makeMemory({
+      id: 'negative',
+      feedback: { positive: 0, negative: 10, neutral: 0 },
+    })
+
+    const results = localRerank([
+      { memory: memPositive, relevanceScore: 0.5 },
+      { memory: memNegative, relevanceScore: 0.5 },
+    ])
+
+    expect(results[0].id).toBe('positive')
   })
 })

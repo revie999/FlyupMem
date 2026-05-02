@@ -83,6 +83,7 @@ export async function reflect(
       retrieval_strength: 0.9,
       storage_strength: 1.0,
       frequency: 1,
+      turn_count: 0,
       last_accessed: today,
     },
     emotional_weight: 7,

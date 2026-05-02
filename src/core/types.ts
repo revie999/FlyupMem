@@ -23,6 +23,7 @@ export interface Activation {
   retrieval_strength: number   // [0, 1]
   storage_strength: number     // [0, 1]
   frequency: number
+  turn_count: number           // how many conversation turns recalled this memory
   last_accessed: string        // ISO date (YYYY-MM-DD)
 }
 

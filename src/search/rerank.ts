@@ -1,7 +1,7 @@
 // src/search/rerank.ts — 8-dimensional local rerank
 
 import type { Memory, ScoredResult } from '../core/types.js'
-import { computeActivation } from '../lifecycle/decay.js'
+import { computeActivation, computeQualityScore } from '../lifecycle/decay.js'
 import { daysSince } from '../lifecycle/decay.js'
 
 interface RerankDimensions {
@@ -13,17 +13,19 @@ interface RerankDimensions {
   confidence: number     // 0-1: normalized confidence (1-10 → 0-1)
   scope: number          // 0-1: scope match bonus
   polarity: number       // 0-1: polarity alignment with query intent
+  quality: number        // 0-1: memory quality (turn count, decay ratio, consolidation, feedback balance)
 }
 
 const WEIGHTS: Record<keyof RerankDimensions, number> = {
-  relevance: 0.25,
-  specificity: 0.10,
-  activation: 0.15,
-  recency: 0.15,
-  evidenceStrength: 0.10,
-  confidence: 0.10,
-  scope: 0.10,
-  polarity: 0.05,
+  relevance: 0.22,
+  specificity: 0.08,
+  activation: 0.12,
+  recency: 0.12,
+  evidenceStrength: 0.08,
+  confidence: 0.08,
+  scope: 0.08,
+  polarity: 0.04,
+  quality: 0.18,
 }
 
 /**
@@ -105,6 +107,13 @@ export function localRerank(
       confidence: (mem.confidence ?? 5) / 10,
       scope: computeScopeMatch(mem.scope ?? 'global', queryScope ?? null),
       polarity: computePolarity((mem as any).polarity ?? null),
+      quality: computeQualityScore(
+        mem.activation,
+        mem.layer as any,
+        mem.emotional_weight ?? 5,
+        (mem as any).consolidated ?? false,
+        (mem as any).feedback,
+      ),
     }
 
     // Weighted sum

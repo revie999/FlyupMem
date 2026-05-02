@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- Added Memory Quality Scoring with 9-dimension rerank pipeline:
+  - New `turn_count` field in Activation tracks how many conversation turns recalled each memory.
+  - `computeActivation` now includes log-scaled turn_count boost (capped at +0.15).
+  - New `computeQualityScore` function: factors in turn_count, decay ratio, consolidation status, and feedback balance.
+  - 9th rerank dimension `quality` (weight 0.18) replaces previous 8-dim weights.
+  - `recallWithExplanation` automatically increments `turn_count` and persists via `store.save()`.
 - Added Memory Curation CLI for local store quality maintenance:
   - `flyupmem review` finds likely dogfood/test/marker/low-value memory candidates.
   - `flyupmem prune` is dry-run by default.

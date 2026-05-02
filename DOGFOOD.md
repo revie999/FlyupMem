@@ -1,5 +1,24 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-02 — Memory Quality Scoring ✅ PASS
+
+**新增能力：**
+- Activation 新增 `turn_count` 字段，跟踪记忆被召回的对话轮次。
+- `computeActivation` 加入 turn_count 对数增益（上限 +0.15）。
+- 新增 `computeQualityScore`：综合 turn_count、衰减比率、consolidation 状态、feedback 正负比。
+- Rerank 从 8 维升级到 9 维，新增 `quality` 维度（权重 0.18）。
+- `recallWithExplanation` 召回时自动递增 `turn_count` 并通过 `store.save()` 持久化。
+- Zod schema `turn_count` 设 `.default(0)` 保证旧数据向后兼容。
+
+**验证：**
+- TDD 新增 `tests/decay.test.ts` 扩展：turn_count boost、quality score 6 项测试。
+- TDD 新增 `tests/rerank.test.ts` 扩展：quality 维度 3 项测试（turn_count、consolidated、feedback）。
+- `npm test`：23 files / 165 TS tests + 8 Python boundary tests 全绿。
+- `npm run build`：TypeScript 编译通过。
+- dist CLI dogfood：临时 store `learn → recall → recall`，确认 `turn_count: 0 → 1 → 2` 持久化正确。
+
+---
+
 ### 2026-05-02 — Memory Curation CLI Dogfood ✅ PASS
 
 **新增能力：**
