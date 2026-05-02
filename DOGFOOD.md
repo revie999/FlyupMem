@@ -1,5 +1,40 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-02 — v0.5.0 SQLite FTS5 缓存 + 嵌入向量缓存 + 性能基准
+
+**SQLite FTS5 缓存层（src/core/sqlite-cache.ts）**
+- better-sqlite3 原生驱动，WAL 模式
+- 五张表：memory_fts(FTS5 trigram)、memory_meta、memory_vectors、feedback、memory_links
+- Store.load() 自动开缓存 + 从 YAML 重建索引
+- Store 增删改自动同步 FTS
+- 21 个专项测试
+
+**嵌入向量缓存**
+- embed() 支持 SQLiteCache 参数，先查缓存再计算
+- embedBatch() 批量嵌入，只算缺失的
+- semanticSearch 接入缓存，避免重复计算
+- Float32Array ↔ Buffer 转换存 SQLite BLOB
+
+**性能基准（M4 Studio, 64GB）**
+
+| 操作 | 100 | 1K | 5K | 10K |
+|------|-----|-----|-----|------|
+| BM25 内存 | 3.5ms | 18ms | 66ms | 96ms |
+| FTS5 搜索 | 1.4ms | 3.2ms | 4.1ms | 3.9ms |
+| 完整 recall | 1.4ms | 2.8ms | — | — |
+| SQLite 重建 | 4.9ms | 69ms | 260ms | — |
+
+FTS5 搜索恒定 ~4ms，不随数据量增长。
+
+**已知限制：** FTS5 trigram 对中文 MATCH 无效，自动降级内存 BM25（jieba 分词）。
+
+**其他**
+- 新增 `sqlite_enabled` 配置项（默认 true）
+- status 工具显示 SQLite 缓存统计
+- 164 个测试全绿（147 功能 + 17 基准）
+
+---
+
 ### 2026-05-01 — 配置面板 CLI
 
 增加交互式配置管理：以前只能通过代码或手动编辑 config.yaml 修改配置。
