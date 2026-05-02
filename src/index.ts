@@ -266,7 +266,7 @@ async function main() {
     }
 
     default:
-      console.log(`FlyupMem v0.4.0 — Local-first memory for AI agents
+      console.log(`FlyupMem v0.5.1 — Local-first memory for AI agents
 
 Usage:
   flyupmem learn "<user message>" ["<assistant message>"]

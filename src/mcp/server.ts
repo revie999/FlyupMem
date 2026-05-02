@@ -19,7 +19,7 @@ const store = new FlyupMemStore()
 function createServer(): McpServer {
   const server = new McpServer({
     name: 'flyupmem',
-    version: '0.4.0',
+    version: '0.5.1',
   })
 
   // ─── flyup_learn ────────────────────────────────────────────

@@ -1,5 +1,5 @@
 name: flyupmem
-version: 0.4.0
+version: 0.5.1
 description: "FlyupMem — local-first memory with YAML storage, multi-signal retrieval, ACT-R decay."
 pip_dependencies: []
 requires_env: []
