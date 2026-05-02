@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Added
+- Added Incremental Sync with Smart Debounce:
+  - `flyupSyncPush` now only stages files that actually changed (`addChangedFiles` replaces `addTrackedFiles`).
+  - New `stagedFiles` field in `SyncPushResult` shows which files were committed.
+  - Debounce: skips commit if last commit was < 5 seconds ago (configurable via `debounceMs`).
+  - `--force` flag bypasses debounce for urgent syncs.
+- Added Conflict Resolution (local-wins strategy):
+  - `flyupSyncPull` accepts `strategy` parameter: `'ff-only'` (default) or `'local-wins'`.
+  - `local-wins`: on divergent histories, resets to remote then cherry-picks local commits, resolving conflicts by keeping local version.
+  - CLI: `flyupmem sync pull --strategy local-wins`.
 - Added Batch Operations for memory curation:
   - `review --batch`: removes the default 50-item limit, returns all review candidates.
   - `prune --all`: batch retires all review candidates in one pass (implies --apply).

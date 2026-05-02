@@ -63,11 +63,12 @@ describe('flyupSync', () => {
     fs.writeFileSync(path.join(tmp, 'index.sqlite'), 'cache')
 
     const first = flyupSyncPush(store)
-    const second = flyupSyncPush(store)
+    const second = flyupSyncPush(store, { force: true })
 
     expect(first.ok).toBe(true)
     expect(first.committed).toBe(true)
     expect(first.commitHash).toMatch(/^[0-9a-f]{7,40}$/)
+    expect(first.stagedFiles).toContain('engrams.yaml')
     expect(second.ok).toBe(true)
     expect(second.committed).toBe(false)
     expect(second.message).toContain('No changes')

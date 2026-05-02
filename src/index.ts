@@ -32,6 +32,7 @@ export type { InspectResult, MemoryDetail, RelatedMemory, GraphEdgeInfo, Feedbac
 export { configShow, configSet, configReset, configKeys } from './tools/flyup_config.js'
 export type { ConfigResult } from './tools/flyup_config.js'
 export { flyupSyncInit, flyupSyncStatus, flyupSyncPull, flyupSyncPush, flyupSync } from './tools/flyup_sync.js'
+export type { ConflictStrategy } from './tools/flyup_sync.js'
 export type { SyncInitResult, SyncStatusResult, SyncPullResult, SyncPushResult, SyncResult } from './tools/flyup_sync.js'
 export { flyupReview, flyupPrune } from './tools/flyup_curate.js'
 export type { ReviewResult, ReviewItem, ReviewOptions, PruneResult, PruneOptions } from './tools/flyup_curate.js'
@@ -303,6 +304,9 @@ async function main() {
     case 'sync': {
       const sub = args[1]
       let result: unknown
+      const hasForce = args.includes('--force')
+      const strategyIdx = args.indexOf('--strategy')
+      const strategy = strategyIdx >= 0 ? (args[strategyIdx + 1] as 'ff-only' | 'local-wins') : undefined
       if (!sub) {
         result = flyupSync(store)
       } else if (sub === 'init') {
@@ -310,9 +314,9 @@ async function main() {
       } else if (sub === 'status') {
         result = flyupSyncStatus(store)
       } else if (sub === 'pull') {
-        result = flyupSyncPull(store)
+        result = flyupSyncPull(store, strategy)
       } else if (sub === 'push') {
-        result = flyupSyncPush(store)
+        result = flyupSyncPush(store, { force: hasForce })
       } else {
         console.error(`Unknown sync subcommand: ${sub}. Use: init | status | pull | push`)
         process.exit(1)

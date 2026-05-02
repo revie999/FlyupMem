@@ -1,5 +1,25 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-02 — Incremental Sync + Conflict Resolution ✅ PASS
+
+**新增能力 — Incremental Sync：**
+- `addChangedFiles`：只 stage 实际有变化的文件，不再全量 `git add`。
+- `SyncPushResult` 新增 `stagedFiles` 和 `debounced` 字段。
+- Debounce：上次 commit < 5 秒内自动跳过（可通过 `debounceMs` 配置）。
+- CLI `--force` 跳过 debounce。
+
+**新增能力 — Conflict Resolution：**
+- `flyupSyncPull` 新增 `strategy` 参数：`'ff-only'`（默认）或 `'local-wins'`。
+- `local-wins`：divergent histories 时 reset 到 remote，cherry-pick 本地 commit，冲突用 `--ours` 解决。
+- CLI：`flyupmem sync pull --strategy local-wins`。
+
+**验证：**
+- `npm run test:sync`：5 个集成测试全绿。
+- `npm test`：23 files / 171 TS tests + 8 Python boundary tests 全绿。
+- dist CLI dogfood：debounce 行为正确（连续 push 被拦截），`--force` 绕过。
+
+---
+
 ### 2026-05-02 — Batch Operations ✅ PASS
 
 **新增能力：**
