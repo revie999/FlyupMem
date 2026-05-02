@@ -107,19 +107,19 @@ function noTurns() {
 
 describe('computeQualityScore', () => {
   it('higher turn_count increases quality', () => {
-    const low = computeQualityScore(makeActivation({ turn_count: 0 }), 'raw', 5)
-    const high = computeQualityScore(makeActivation({ turn_count: 10 }), 'raw', 5)
+    const low = computeQualityScore(makeActivation({ turn_count: 0 }), 'raw', 5, false, undefined, 0)
+    const high = computeQualityScore(makeActivation({ turn_count: 10 }), 'raw', 5, false, undefined, 0)
     expect(high).toBeGreaterThan(low)
   })
 
   it('consolidated memories get a bonus', () => {
-    const base = computeQualityScore(makeActivation(), 'raw', 5, false)
-    const consolidated = computeQualityScore(makeActivation(), 'raw', 5, true)
+    const base = computeQualityScore(makeActivation(), 'raw', 5, false, undefined, 0)
+    const consolidated = computeQualityScore(makeActivation(), 'raw', 5, true, undefined, 0)
     expect(consolidated).toBeGreaterThan(base)
   })
 
   it('positive feedback boosts quality', () => {
-    const noFeedback = computeQualityScore(makeActivation(), 'raw', 5, false)
+    const noFeedback = computeQualityScore(makeActivation(), 'raw', 5, false, undefined, 0)
     const withFeedback = computeQualityScore(makeActivation(), 'raw', 5, false, {
       positive: 8, negative: 1, neutral: 1,
     })
@@ -129,25 +129,39 @@ describe('computeQualityScore', () => {
   it('negative feedback reduces quality vs positive', () => {
     const positive = computeQualityScore(makeActivation(), 'raw', 5, false, {
       positive: 8, negative: 1, neutral: 1,
-    })
+    }, 0)
     const negative = computeQualityScore(makeActivation(), 'raw', 5, false, {
       positive: 1, negative: 8, neutral: 1,
-    })
+    }, 0)
     expect(positive).toBeGreaterThan(negative)
   })
 
   it('stale memory has lower quality than fresh', () => {
     const today = new Date().toISOString().slice(0, 10)
-    const fresh = computeQualityScore(makeActivation({ last_accessed: today }), 'raw', 5)
-    const stale = computeQualityScore(makeActivation({ last_accessed: '2020-01-01' }), 'raw', 5)
+    const fresh = computeQualityScore(makeActivation({ last_accessed: today }), 'raw', 5, false, undefined, 0)
+    const stale = computeQualityScore(makeActivation({ last_accessed: '2020-01-01' }), 'raw', 5, false, undefined, 0)
     expect(fresh).toBeGreaterThan(stale)
+  })
+
+  it('adoption count boosts quality', () => {
+    const noAdoption = computeQualityScore(makeActivation(), 'raw', 5, false, undefined, 0)
+    const fiveAdoptions = computeQualityScore(makeActivation(), 'raw', 5, false, undefined, 5)
+    const twentyAdoptions = computeQualityScore(makeActivation(), 'raw', 5, false, undefined, 20)
+    expect(fiveAdoptions).toBeGreaterThan(noAdoption)
+    expect(twentyAdoptions).toBeGreaterThan(fiveAdoptions)
+  })
+
+  it('adoption boost is capped at 0.20', () => {
+    const high = computeQualityScore(makeActivation(), 'raw', 5, false, undefined, 100)
+    const veryHigh = computeQualityScore(makeActivation(), 'raw', 5, false, undefined, 1000)
+    expect(Math.abs(high - veryHigh)).toBeLessThan(0.01)
   })
 
   it('quality score is between 0 and 1', () => {
     // Worst case
     const worst = computeQualityScore(
       { retrieval_strength: 0, storage_strength: 0, frequency: 0, turn_count: 0, last_accessed: '2020-01-01' },
-      'experience', 1, false, { positive: 0, negative: 10, neutral: 0 },
+      'experience', 1, false, { positive: 0, negative: 10, neutral: 0 }, 0,
     )
     expect(worst).toBeGreaterThanOrEqual(0)
     expect(worst).toBeLessThanOrEqual(1)
@@ -156,7 +170,7 @@ describe('computeQualityScore', () => {
     const today = new Date().toISOString().slice(0, 10)
     const best = computeQualityScore(
       { retrieval_strength: 1.0, storage_strength: 1.0, frequency: 100, turn_count: 100, last_accessed: today },
-      'mental_model', 10, true, { positive: 50, negative: 0, neutral: 0 },
+      'mental_model', 10, true, { positive: 50, negative: 0, neutral: 0 }, 10,
     )
     expect(best).toBeGreaterThanOrEqual(0)
     expect(best).toBeLessThanOrEqual(1)

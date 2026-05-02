@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+- Added Adoption-Based Scoring:
+  - New `adoption_count` field on Engram tracks how many times positive feedback was given.
+  - `applyFeedback` automatically increments `adoption_count` on positive signal only.
+  - `computeQualityScore` now factors in adoption count (log-scaled, capped at +0.20).
+  - Reranker passes `adoption_count` to quality dimension.
+  - Zod schema `adoption_count` with `.default(0)` for backward compatibility.
 - Added Memory Quality Scoring with 9-dimension rerank pipeline:
   - New `turn_count` field in Activation tracks how many conversation turns recalled each memory.
   - `computeActivation` now includes log-scaled turn_count boost (capped at +0.15).

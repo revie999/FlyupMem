@@ -117,6 +117,9 @@ export interface Engram {
     neutral: number
   }
 
+  // Adoption tracking
+  adoption_count: number         // times positive feedback was given after recall
+
   // Provenance
   previous_version_ref: string | null
   derivation_count: number

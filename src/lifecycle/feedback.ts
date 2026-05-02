@@ -44,6 +44,10 @@ export function applyFeedback(
     if ('confidence' in mem) {
       mem.confidence = Math.min(10, (mem.confidence ?? 5) + 1)
     }
+    // Adoption: positive feedback = user adopted this memory's guidance
+    if ('adoption_count' in mem) {
+      (mem as any).adoption_count = ((mem as any).adoption_count ?? 0) + 1
+    }
   } else if (signal === 'negative') {
     mem.activation.storage_strength = Math.max(0.0, mem.activation.storage_strength - 0.15)
     mem.activation.retrieval_strength = Math.max(0.0, mem.activation.retrieval_strength - 0.1)

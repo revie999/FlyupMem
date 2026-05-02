@@ -31,6 +31,7 @@ function makeMemory(overrides: Partial<Memory> = {}): Memory {
     content_hash: 'hash-test',
     associations: [],
     feedback: { positive: 0, negative: 0, neutral: 0 },
+    adoption_count: 0,
     previous_version_ref: null,
     derivation_count: 1,
     ...overrides,
@@ -132,6 +133,24 @@ describe('localRerank', () => {
     ])
 
     expect(results[0].id).toBe('consolidated')
+  })
+
+  it('quality dimension boosts memories with high adoption count', () => {
+    const memAdopted = makeMemory({
+      id: 'adopted',
+      adoption_count: 10,
+    })
+    const memNotAdopted = makeMemory({
+      id: 'not-adopted',
+      adoption_count: 0,
+    })
+
+    const results = localRerank([
+      { memory: memAdopted, relevanceScore: 0.5 },
+      { memory: memNotAdopted, relevanceScore: 0.5 },
+    ])
+
+    expect(results[0].id).toBe('adopted')
   })
 
   it('quality dimension boosts memories with positive feedback', () => {

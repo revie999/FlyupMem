@@ -90,6 +90,8 @@ export const EngramSchema = z.object({
     neutral: z.number().int().min(0),
   }),
 
+  adoption_count: z.number().int().min(0).default(0),
+
   previous_version_ref: z.string().nullable(),
   derivation_count: z.number().int().min(1),
 })

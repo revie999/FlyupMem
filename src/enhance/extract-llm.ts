@@ -109,6 +109,7 @@ export async function extractEngramsLLM(
 
       associations: [],
       feedback: { positive: 0, negative: 0, neutral: 0 },
+      adoption_count: 0,
       previous_version_ref: null,
       derivation_count: 1,
     }

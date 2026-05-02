@@ -1,5 +1,21 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-02 — Adoption-Based Scoring ✅ PASS
+
+**新增能力：**
+- Engram 新增 `adoption_count` 字段，跟踪正反馈次数（= 用户实际采纳了记忆建议）。
+- `applyFeedback` 收到 `positive` 信号时自动递增 `adoption_count`，`negative`/`neutral` 不变。
+- `computeQualityScore` 纳入 adoption 增益：`min(0.20, log1p(adoption_count) * 0.06)`。
+- Reranker 的 quality 维度传入 `adoption_count`。
+- Zod schema 设 `.default(0)` 保证向后兼容。
+
+**验证：**
+- TDD：decay.test.ts 新增 2 项 adoption 测试，rerank.test.ts 新增 1 项 adoption 测试。
+- `npm test`：23 files / 168 TS tests + 8 Python boundary tests 全绿。
+- dist CLI dogfood：临时 store `learn → feedback(positive) → feedback(positive) → feedback(negative)`，确认 `adoption_count: 0 → 1 → 2 → 2`（negative 不递增）。
+
+---
+
 ### 2026-05-02 — Memory Quality Scoring ✅ PASS
 
 **新增能力：**

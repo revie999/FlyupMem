@@ -113,6 +113,7 @@ export function localRerank(
         mem.emotional_weight ?? 5,
         (mem as any).consolidated ?? false,
         (mem as any).feedback,
+        (mem as any).adoption_count ?? 0,
       ),
     }
 

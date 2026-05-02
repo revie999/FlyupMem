@@ -80,6 +80,7 @@ export function computeQualityScore(
   emotionalWeight: number = 5,
   consolidated: boolean = false,
   feedback?: { positive: number; negative: number; neutral: number },
+  adoptionCount: number = 0,
 ): number {
   // Turn count contribution: proven usefulness
   const turnScore = Math.min(0.30, Math.log1p(activation.turn_count ?? 0) * 0.08)
@@ -97,11 +98,14 @@ export function computeQualityScore(
     const total = feedback.positive + feedback.negative + feedback.neutral
     if (total > 0) {
       const positiveRatio = feedback.positive / total
-      feedbackScore = positiveRatio * 0.20 // max 0.20
+      feedbackScore = positiveRatio * 0.15 // max 0.15 (reduced to make room for adoption)
     }
   }
 
-  return Math.min(1.0, turnScore + decayRatio * 0.35 + consolidationBonus + feedbackScore)
+  // Adoption bonus: proven user adoption after recall
+  const adoptionScore = Math.min(0.20, Math.log1p(adoptionCount) * 0.06)
+
+  return Math.min(1.0, turnScore + decayRatio * 0.30 + consolidationBonus + feedbackScore + adoptionScore)
 }
 
 /**
