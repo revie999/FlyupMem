@@ -1,0 +1,129 @@
+// tests/curate.test.ts
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
+import { FlyupMemStore } from '../src/core/store.js'
+import { flyupReview, flyupPrune } from '../src/tools/flyup_curate.js'
+import type { Engram } from '../src/core/types.js'
+import { contentHash } from '../src/core/hash.js'
+
+function tmpDir(): string {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'flyupmem-curate-'))
+}
+
+function makeEngram(overrides: Partial<Engram> = {}): Engram {
+  const now = new Date().toISOString()
+  const today = now.slice(0, 10)
+  const statement = overrides.statement ?? '主人偏好直接给结论。'
+  return {
+    id: overrides.id ?? `ENG-CURATE-${Math.random().toString(16).slice(2, 8)}`,
+    version: 1,
+    layer: 'raw',
+    status: 'active',
+    consolidated: false,
+    type: 'behavioral',
+    memory_class: 'semantic',
+    polarity: null,
+    commitment: 'decided',
+    scope: 'global',
+    visibility: 'private',
+    domain: 'user-preference',
+    tags: [],
+    statement,
+    rationale: '',
+    contraindications: [],
+    entities: [],
+    temporal: { learned_at: now, valid_from: today, valid_until: null },
+    source: { episode_id: null, quote: statement, origin: 'hermes:telegram' },
+    activation: { retrieval_strength: 0.8, storage_strength: 1.0, frequency: 1, last_accessed: today },
+    emotional_weight: 5,
+    confidence: 7,
+    content_hash: contentHash(statement),
+    associations: [],
+    feedback: { positive: 0, negative: 0, neutral: 0 },
+    previous_version_ref: null,
+    derivation_count: 1,
+    ...overrides,
+  }
+}
+
+describe('flyupCurate', () => {
+  let dir: string
+  let store: FlyupMemStore
+
+  beforeEach(() => {
+    dir = tmpDir()
+    store = new FlyupMemStore({ store_path: dir })
+    store.load()
+  })
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('review flags dogfood and marker memories but not normal preferences', () => {
+    store.addEngram(makeEngram({ id: 'NORMAL-001', statement: '主人偏好结构化清单式分析。' }))
+    store.addEngram(makeEngram({
+      id: 'DOGFOOD-001',
+      statement: 'telegram-live-restart-20260501-2309 marker should not be recalled daily',
+      tags: ['dogfood'],
+      domain: 'testing',
+    }))
+    store.save()
+
+    const result = flyupReview(store)
+
+    expect(result.total).toBe(1)
+    expect(result.items[0].id).toBe('DOGFOOD-001')
+    expect(result.items[0].reasons.join(' ')).toContain('dogfood/test tag')
+    expect(result.items[0].reasons.join(' ')).toContain('test marker')
+    expect(result.items.map(i => i.id)).not.toContain('NORMAL-001')
+  })
+
+  it('prune is dry-run by default and does not mutate YAML', () => {
+    store.addEngram(makeEngram({ id: 'DOGFOOD-002', statement: 'hermes-provider-v051-explain-boundary marker', tags: ['dogfood'] }))
+    store.save()
+
+    const result = flyupPrune(store, {})
+    const fresh = new FlyupMemStore({ store_path: dir })
+    fresh.load()
+
+    expect(result.ok).toBe(true)
+    expect(result.applied).toBe(false)
+    expect(result.matched).toBe(1)
+    expect(result.changed).toBe(0)
+    expect(fresh.getEngramById('DOGFOOD-002')!.status).toBe('active')
+  })
+
+  it('prune --apply retires matched memories and persists the change', () => {
+    store.addEngram(makeEngram({ id: 'DOGFOOD-003', statement: 'cli-explain-20260501 marker', tags: ['dogfood'] }))
+    store.save()
+
+    const result = flyupPrune(store, { apply: true })
+    const fresh = new FlyupMemStore({ store_path: dir })
+    fresh.load()
+
+    expect(result.applied).toBe(true)
+    expect(result.matched).toBe(1)
+    expect(result.changed).toBe(1)
+    const retired = fresh.getEngramById('DOGFOOD-003')!
+    expect(retired.status).toBe('retired')
+    expect(retired.tags).toContain('pruned')
+    expect(retired.temporal.valid_until).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  })
+
+  it('prune by explicit id does not retire locked memories', () => {
+    store.addEngram(makeEngram({ id: 'LOCKED-001', statement: 'dogfood marker but locked', tags: ['dogfood'], status: 'locked' }))
+    store.save()
+
+    const result = flyupPrune(store, { apply: true, ids: ['LOCKED-001'] })
+    const fresh = new FlyupMemStore({ store_path: dir })
+    fresh.load()
+
+    expect(result.matched).toBe(1)
+    expect(result.changed).toBe(0)
+    expect(result.skipped[0].reason).toContain('locked')
+    expect(fresh.getEngramById('LOCKED-001')!.status).toBe('locked')
+  })
+})

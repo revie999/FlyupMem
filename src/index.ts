@@ -14,6 +14,7 @@ import { flyupSetup } from './tools/flyup_setup.js'
 import { flyupInspect } from './tools/flyup_inspect.js'
 import { configShow, configSet, configReset, configKeys } from './tools/flyup_config.js'
 import { flyupSyncInit, flyupSyncStatus, flyupSyncPull, flyupSyncPush, flyupSync } from './tools/flyup_sync.js'
+import { flyupReview, flyupPrune } from './tools/flyup_curate.js'
 import { initEmbedder } from './search/embed.js'
 
 // Re-export Phase 1-3
@@ -32,6 +33,8 @@ export { configShow, configSet, configReset, configKeys } from './tools/flyup_co
 export type { ConfigResult } from './tools/flyup_config.js'
 export { flyupSyncInit, flyupSyncStatus, flyupSyncPull, flyupSyncPush, flyupSync } from './tools/flyup_sync.js'
 export type { SyncInitResult, SyncStatusResult, SyncPullResult, SyncPushResult, SyncResult } from './tools/flyup_sync.js'
+export { flyupReview, flyupPrune } from './tools/flyup_curate.js'
+export type { ReviewResult, ReviewItem, ReviewOptions, PruneResult, PruneOptions } from './tools/flyup_curate.js'
 export { unifiedRecall, recallWithExplanation, formatInjection } from './search/recall.js'
 export { extractEngramsFromTurn } from './lifecycle/extract.js'
 export { bm25Search } from './search/bm25.js'
@@ -235,6 +238,32 @@ async function main() {
       break
     }
 
+    case 'review': {
+      const limitIdx = args.indexOf('--limit')
+      const queryIdx = args.indexOf('--query')
+      const result = flyupReview(store, {
+        limit: limitIdx >= 0 ? Number(args[limitIdx + 1]) : undefined,
+        query: queryIdx >= 0 ? args[queryIdx + 1] : undefined,
+        includeRetired: args.includes('--include-retired'),
+      })
+      console.log(JSON.stringify(result, null, 2))
+      break
+    }
+
+    case 'prune': {
+      const ids = args.flatMap((arg, idx) => arg === '--id' && args[idx + 1] ? [args[idx + 1]] : [])
+      const tagIdx = args.indexOf('--tag')
+      const queryIdx = args.indexOf('--query')
+      const result = flyupPrune(store, {
+        apply: args.includes('--apply'),
+        ids: ids.length ? ids : undefined,
+        tag: tagIdx >= 0 ? args[tagIdx + 1] : undefined,
+        query: queryIdx >= 0 ? args[queryIdx + 1] : undefined,
+      })
+      console.log(JSON.stringify(result, null, 2))
+      break
+    }
+
     case 'config': {
       const sub = args[1]
       if (!sub || sub === 'show') {
@@ -306,6 +335,8 @@ Usage:
   flyupmem doctor                            # Deep health check
   flyupmem setup [--force]                   # Environment check + store init
   flyupmem inspect <memory-id> [--json]      # Inspect memory detail & activation
+  flyupmem review [--limit N] [--query q]    # Review low-value/test memory candidates
+  flyupmem prune [--apply] [--id ID|--tag T] # Retire review candidates (dry-run by default)
   flyupmem config [show]                     # Show current config
   flyupmem config set <key> <value>          # Set config value
   flyupmem config reset                      # Reset to defaults

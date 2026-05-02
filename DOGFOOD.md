@@ -1,5 +1,23 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-02 — Memory Curation CLI Dogfood ✅ PASS
+
+**新增能力：**
+- `flyupmem review`：列出疑似低价值 / dogfood / marker / test 记忆候选，默认不包含 retired。
+- `flyupmem prune`：默认 dry-run，显示会退休哪些候选。
+- `flyupmem prune --apply`：将候选安全标记为 `retired`，追加 `pruned` tag，并设置 `valid_until`；不物理删除，`locked` 记忆受保护。
+
+**验证：**
+- TDD 新增 `tests/curate.test.ts`：4 个测试覆盖 review、dry-run、apply、locked 保护。
+- `npm test`：23 files / 153 TS tests + 8 Python boundary tests 全绿。
+- `npm run build`：TypeScript 编译通过。
+- dist CLI dogfood：临时 store 完整 `learn(marker) → review → prune(dry-run) → prune --apply → review` 通过，确认 dry-run 不变更，apply 后默认 review 不再返回 retired marker。
+
+**说明：**
+- 该功能优先服务本地记忆质量维护；主人已明确云端 GitHub 远端同步不是当前刚需。
+
+---
+
 ### 2026-05-02 — Real Store Git Sync Bootstrap ⚠️ PARTIAL
 
 **真实 store：** `~/.flyupmem`

@@ -3,6 +3,11 @@
 ## Unreleased
 
 ### Added
+- Added Memory Curation CLI for local store quality maintenance:
+  - `flyupmem review` finds likely dogfood/test/marker/low-value memory candidates.
+  - `flyupmem prune` is dry-run by default.
+  - `flyupmem prune --apply` safely retires candidates instead of deleting them, tags them `pruned`, and protects `locked` memories.
+- Added tests and dist CLI dogfood coverage for review/prune workflows.
 - Added Git Sync CLI MVP for YAML-first store portability:
   - `flyupmem sync init [remote]`
   - `flyupmem sync status`
