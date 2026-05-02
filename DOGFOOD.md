@@ -1,8 +1,8 @@
 # FlyupMem Dogfood Log
 
-### 2026-05-02 — v0.5.1 Hermes Dogfood 验证
+### 2026-05-02 — v0.5.1 Hermes Dogfood ✅ PASS
 
-**验证环境：** Gateway PID 78716，Hermes provider: flyupmem (active)
+**验证环境：** Gateway，Hermes provider: flyupmem (active)
 
 **✅ 通过的验证项：**
 1. `hermes memory status` 显示 flyupmem 为 active provider
@@ -35,6 +35,19 @@
 - 回归测试：新增 2 个 TS extractor 测试 + 2 个 Python provider boundary 测试
 - 清理：已删除污染记忆 `ENG-20260502-004`，SQLite 同步删除
 - 验证：`npm test` 23 files / 166 tests 全绿；Hermes plugin 8 tests 全绿；`npm run build` 通过；live status 为 4 engrams / 1 observation / health ok
+
+**2026-05-02 Telegram dogfood 综合验证**
+| 场景 | 期望 | 结果 |
+|---|---|---|
+| 短句"继续" | 不学习 | ✅ |
+| 短句"都可以" | 不学习 | ✅ |
+| 短句"可以继续" + memory-context 块 | 不学习 | ✅ |
+| Telegram reply preview `[Replying to]` | 不学习 | ✅（修复后） |
+| memory-context 内的旧 marker | 不误提取 | ✅ |
+| "记住我爱你"（无冒号,4字） | 保守拦截 | ✅ |
+| 含"记住"的 memory-context 块 | 不学习旧 marker | ✅ |
+
+**结论：v0.5.1 dogfood PASS。** 所有自动学习边界验证通过，无新增污染。
 
 ---
 
