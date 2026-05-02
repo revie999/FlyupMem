@@ -427,10 +427,10 @@ export class SQLiteCache {
 
     const db = this.db!
 
-    db.exec('DELETE FROM memory_fts')
-    db.exec('DELETE FROM memory_meta')
+    const rebuild = db.transaction(() => {
+      db.exec('DELETE FROM memory_fts')
+      db.exec('DELETE FROM memory_meta')
 
-    const insertAll = db.transaction(() => {
       let count = 0
 
       for (const e of data.engrams) {
@@ -469,7 +469,7 @@ export class SQLiteCache {
       return count
     })
 
-    const indexed = insertAll()
+    const indexed = rebuild()
     return { indexed }
   }
 
