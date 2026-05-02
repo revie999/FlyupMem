@@ -1,5 +1,19 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-02 — Batch Operations ✅ PASS
+
+**新增能力：**
+- `review --batch`：移除默认 50 条限制，返回所有审查候选。
+- `prune --all`：一键批量退休所有审查候选（隐含 `--apply`）。
+- `prune --confirm`：执行退休并输出每项详情（id, statement, action, reason）。
+
+**验证：**
+- TDD：curate.test.ts 新增 3 项测试（batch limit removal, --all batch retire, --confirm details）。
+- `npm test`：23 files / 171 TS tests + 8 Python boundary tests 全绿。
+- dist CLI dogfood：临时 store 创建 5 条 dogfood 记忆，`review --batch` 返回全部 5 条，`prune --all` 一次退休 5/5，`prune --confirm` 输出每项 confirm_details。
+
+---
+
 ### 2026-05-02 — Adoption-Based Scoring ✅ PASS
 
 **新增能力：**

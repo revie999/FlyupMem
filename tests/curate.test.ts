@@ -36,12 +36,13 @@ function makeEngram(overrides: Partial<Engram> = {}): Engram {
     entities: [],
     temporal: { learned_at: now, valid_from: today, valid_until: null },
     source: { episode_id: null, quote: statement, origin: 'hermes:telegram' },
-    activation: { retrieval_strength: 0.8, storage_strength: 1.0, frequency: 1, last_accessed: today },
+    activation: { retrieval_strength: 0.8, storage_strength: 1.0, frequency: 1, turn_count: 0, last_accessed: today },
     emotional_weight: 5,
     confidence: 7,
     content_hash: contentHash(statement),
     associations: [],
     feedback: { positive: 0, negative: 0, neutral: 0 },
+    adoption_count: 0,
     previous_version_ref: null,
     derivation_count: 1,
     ...overrides,
@@ -125,5 +126,59 @@ describe('flyupCurate', () => {
     expect(result.changed).toBe(0)
     expect(result.skipped[0].reason).toContain('locked')
     expect(fresh.getEngramById('LOCKED-001')!.status).toBe('locked')
+  })
+
+  // ─── Batch operations ─────────────────────────────────────────
+
+  it('review --batch removes the default 50-item limit', () => {
+    // Add 60 dogfood memories
+    for (let i = 0; i < 60; i++) {
+      store.addEngram(makeEngram({ id: `BATCH-${i}`, statement: `dogfood marker ${i}`, tags: ['dogfood'] }))
+    }
+    store.save()
+
+    const limited = flyupReview(store)
+    const batched = flyupReview(store, { batch: true })
+
+    expect(limited.total).toBe(50) // default limit
+    expect(batched.total).toBe(60) // no limit
+  })
+
+  it('prune --all retires all review candidates in one pass', () => {
+    store.addEngram(makeEngram({ id: 'ALL-001', statement: 'dogfood marker A', tags: ['dogfood'] }))
+    store.addEngram(makeEngram({ id: 'ALL-002', statement: 'dogfood marker B', tags: ['test'] }))
+    store.addEngram(makeEngram({ id: 'ALL-003', statement: '主人偏好直接给结论。' })) // not a candidate
+    store.save()
+
+    const result = flyupPrune(store, { all: true })
+    const fresh = new FlyupMemStore({ store_path: dir })
+    fresh.load()
+
+    expect(result.applied).toBe(true)
+    expect(result.matched).toBe(2)
+    expect(result.changed).toBe(2)
+    expect(fresh.getEngramById('ALL-001')!.status).toBe('retired')
+    expect(fresh.getEngramById('ALL-002')!.status).toBe('retired')
+    expect(fresh.getEngramById('ALL-003')!.status).toBe('active') // untouched
+  })
+
+  it('prune --confirm returns per-item detail output', () => {
+    store.addEngram(makeEngram({ id: 'CFM-001', statement: 'dogfood marker X', tags: ['dogfood'] }))
+    store.addEngram(makeEngram({ id: 'CFM-LOCKED', statement: 'dogfood locked', tags: ['dogfood'], status: 'locked' }))
+    store.save()
+
+    const result = flyupPrune(store, { confirm: true })
+
+    expect(result.applied).toBe(true)
+    expect(result.confirm_details).toBeDefined()
+    expect(result.confirm_details!.length).toBe(2)
+
+    const retired = result.confirm_details!.find(d => d.id === 'CFM-001')!
+    expect(retired.action).toBe('retired')
+    expect(retired.reason).toContain('dogfood/test tag')
+
+    const skipped = result.confirm_details!.find(d => d.id === 'CFM-LOCKED')!
+    expect(skipped.action).toBe('skipped')
+    expect(skipped.reason).toContain('locked')
   })
 })

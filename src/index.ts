@@ -245,6 +245,7 @@ async function main() {
         limit: limitIdx >= 0 ? Number(args[limitIdx + 1]) : undefined,
         query: queryIdx >= 0 ? args[queryIdx + 1] : undefined,
         includeRetired: args.includes('--include-retired'),
+        batch: args.includes('--batch'),
       })
       console.log(JSON.stringify(result, null, 2))
       break
@@ -259,6 +260,8 @@ async function main() {
         ids: ids.length ? ids : undefined,
         tag: tagIdx >= 0 ? args[tagIdx + 1] : undefined,
         query: queryIdx >= 0 ? args[queryIdx + 1] : undefined,
+        all: args.includes('--all'),
+        confirm: args.includes('--confirm'),
       })
       console.log(JSON.stringify(result, null, 2))
       break
@@ -335,8 +338,10 @@ Usage:
   flyupmem doctor                            # Deep health check
   flyupmem setup [--force]                   # Environment check + store init
   flyupmem inspect <memory-id> [--json]      # Inspect memory detail & activation
-  flyupmem review [--limit N] [--query q]    # Review low-value/test memory candidates
-  flyupmem prune [--apply] [--id ID|--tag T] # Retire review candidates (dry-run by default)
+  flyupmem review [--limit N] [--query q] [--batch] # Review low-value/test memory candidates (--batch: no limit)
+  flyupmem prune [--apply] [--id ID|--tag T]        # Retire review candidates (dry-run by default)
+  flyupmem prune --all                               # Batch retire all review candidates
+  flyupmem prune --confirm                           # Retire with per-item detail output
   flyupmem config [show]                     # Show current config
   flyupmem config set <key> <value>          # Set config value
   flyupmem config reset                      # Reset to defaults

@@ -18,6 +18,7 @@ export interface ReviewOptions {
   limit?: number
   includeRetired?: boolean
   query?: string
+  batch?: boolean  // no limit — show all candidates
 }
 
 export interface ReviewResult {
@@ -32,6 +33,8 @@ export interface PruneOptions {
   ids?: string[]
   tag?: string
   query?: string
+  all?: boolean       // explicit batch: prune all review candidates
+  confirm?: boolean   // confirm mode: apply but output per-item details
 }
 
 export interface PruneSkipped {
@@ -47,6 +50,14 @@ export interface PruneResult {
   items: ReviewItem[]
   skipped: PruneSkipped[]
   message: string
+  confirm_details?: PruneConfirmItem[]  // present when confirm=true
+}
+
+export interface PruneConfirmItem {
+  id: string
+  statement: string
+  action: 'retired' | 'skipped'
+  reason: string
 }
 
 const TEST_TAGS = new Set(['dogfood', 'test', 'testing', 'smoke', 'benchmark', 'debug'])
@@ -120,7 +131,7 @@ function reviewEngram(e: Engram): ReviewItem | null {
 
 export function flyupReview(store: FlyupMemStore, options: ReviewOptions = {}): ReviewResult {
   store.load()
-  const limit = options.limit ?? 50
+  const limit = options.batch ? Number.MAX_SAFE_INTEGER : (options.limit ?? 50)
   const items = store.engrams
     .filter(e => options.includeRetired || e.status !== 'retired')
     .filter(e => includesQuery(e, options.query))
@@ -175,24 +186,37 @@ function selectForPrune(store: FlyupMemStore, options: PruneOptions): ReviewItem
 
 export function flyupPrune(store: FlyupMemStore, options: PruneOptions = {}): PruneResult {
   store.load()
-  const items = selectForPrune(store, options)
+
+  // --all: explicitly prune all review candidates
+  const effectiveOptions = options.all
+    ? { ...options, apply: true }
+    : options
+
+  const items = selectForPrune(store, effectiveOptions)
   const skipped: PruneSkipped[] = []
+  const confirmDetails: PruneConfirmItem[] = []
   let changed = 0
 
-  if (options.apply) {
+  // --confirm or --all: always apply
+  const shouldApply = Boolean(effectiveOptions.apply || options.confirm)
+
+  if (shouldApply) {
     const today = new Date().toISOString().slice(0, 10)
     for (const item of items) {
       const e = store.getEngramById(item.id)
       if (!e) {
         skipped.push({ id: item.id, reason: 'not found' })
+        if (options.confirm) confirmDetails.push({ id: item.id, statement: item.statement, action: 'skipped', reason: 'not found' })
         continue
       }
       if (e.status === 'locked') {
         skipped.push({ id: item.id, reason: 'locked memory is protected' })
+        if (options.confirm) confirmDetails.push({ id: item.id, statement: item.statement, action: 'skipped', reason: 'locked' })
         continue
       }
       if (e.status === 'retired') {
         skipped.push({ id: item.id, reason: 'already retired' })
+        if (options.confirm) confirmDetails.push({ id: item.id, statement: item.statement, action: 'skipped', reason: 'already retired' })
         continue
       }
       store.updateEngram(e.id, {
@@ -201,19 +225,21 @@ export function flyupPrune(store: FlyupMemStore, options: PruneOptions = {}): Pr
         temporal: { ...e.temporal, valid_until: e.temporal.valid_until ?? today },
       })
       changed += 1
+      if (options.confirm) confirmDetails.push({ id: item.id, statement: item.statement, action: 'retired', reason: item.reasons.join(', ') })
     }
     if (changed > 0) store.save()
   }
 
   return {
     ok: true,
-    applied: Boolean(options.apply),
+    applied: shouldApply,
     matched: items.length,
     changed,
     items,
     skipped,
-    message: options.apply
+    message: shouldApply
       ? `Retired ${changed}/${items.length} matched memory candidate(s)`
       : `Dry run: ${items.length} memory candidate(s) would be retired. Re-run with --apply to persist.`,
+    ...(options.confirm ? { confirm_details: confirmDetails } : {}),
   }
 }

@@ -3,6 +3,10 @@
 ## Unreleased
 
 ### Added
+- Added Batch Operations for memory curation:
+  - `review --batch`: removes the default 50-item limit, returns all review candidates.
+  - `prune --all`: batch retires all review candidates in one pass (implies --apply).
+  - `prune --confirm`: retires candidates with per-item detail output (id, statement, action, reason).
 - Added Adoption-Based Scoring:
   - New `adoption_count` field on Engram tracks how many times positive feedback was given.
   - `applyFeedback` automatically increments `adoption_count` on positive signal only.
