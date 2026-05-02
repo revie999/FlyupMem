@@ -13,6 +13,7 @@ import { flyupDoctor } from './tools/flyup_doctor.js'
 import { flyupSetup } from './tools/flyup_setup.js'
 import { flyupInspect } from './tools/flyup_inspect.js'
 import { configShow, configSet, configReset, configKeys } from './tools/flyup_config.js'
+import { flyupSyncInit, flyupSyncStatus, flyupSyncPull, flyupSyncPush, flyupSync } from './tools/flyup_sync.js'
 import { initEmbedder } from './search/embed.js'
 
 // Re-export Phase 1-3
@@ -29,6 +30,8 @@ export { flyupInspect } from './tools/flyup_inspect.js'
 export type { InspectResult, MemoryDetail, RelatedMemory, GraphEdgeInfo, FeedbackSummary } from './tools/flyup_inspect.js'
 export { configShow, configSet, configReset, configKeys } from './tools/flyup_config.js'
 export type { ConfigResult } from './tools/flyup_config.js'
+export { flyupSyncInit, flyupSyncStatus, flyupSyncPull, flyupSyncPush, flyupSync } from './tools/flyup_sync.js'
+export type { SyncInitResult, SyncStatusResult, SyncPullResult, SyncPushResult, SyncResult } from './tools/flyup_sync.js'
 export { unifiedRecall, recallWithExplanation, formatInjection } from './search/recall.js'
 export { extractEngramsFromTurn } from './lifecycle/extract.js'
 export { bm25Search } from './search/bm25.js'
@@ -265,6 +268,28 @@ async function main() {
       break
     }
 
+    case 'sync': {
+      const sub = args[1]
+      let result: unknown
+      if (!sub) {
+        result = flyupSync(store)
+      } else if (sub === 'init') {
+        result = flyupSyncInit(store, args[2])
+      } else if (sub === 'status') {
+        result = flyupSyncStatus(store)
+      } else if (sub === 'pull') {
+        result = flyupSyncPull(store)
+      } else if (sub === 'push') {
+        result = flyupSyncPush(store)
+      } else {
+        console.error(`Unknown sync subcommand: ${sub}. Use: init | status | pull | push`)
+        process.exit(1)
+      }
+      console.log(JSON.stringify(result, null, 2))
+      if ((result as { ok?: boolean }).ok === false) process.exit(1)
+      break
+    }
+
     default:
       console.log(`FlyupMem v0.5.1 — Local-first memory for AI agents
 
@@ -285,6 +310,11 @@ Usage:
   flyupmem config set <key> <value>          # Set config value
   flyupmem config reset                      # Reset to defaults
   flyupmem config keys                       # List available config keys
+  flyupmem sync init [remote]                # Initialize Git sync for store
+  flyupmem sync status                       # Show Git sync status
+  flyupmem sync pull                         # Pull remote changes + rebuild cache
+  flyupmem sync push                         # Commit YAML/config changes + push
+  flyupmem sync                              # Pull then push
 
 Environment:
   FLYUP_LLM_API_KEY     LLM API key (for reflect/LLM extraction)

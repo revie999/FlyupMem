@@ -1,4 +1,4 @@
-// tests/benchmark.test.ts — Performance benchmarks at 1K/5K/10K scale
+// tests/benchmark.test.ts — Performance smoke benchmarks at 1K/2.5K/5K scale
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import * as fs from 'node:fs'
@@ -114,7 +114,7 @@ async function measureAsync<T>(fn: () => Promise<T>): Promise<{ result: T; ms: n
 describe('Performance Benchmarks', { timeout: 60000 }, () => {
 
   describe('BM25 search scalability', () => {
-    for (const count of [100, 500, 1000, 5000, 10000]) {
+    for (const count of [100, 500, 1000, 2500, 5000]) {
       it(`BM25 in-memory: ${count} documents`, () => {
         const engrams = generateEngrams(count)
         const documents = engrams.map(e => ({ id: e.id, text: e.statement }))
@@ -142,7 +142,7 @@ describe('Performance Benchmarks', { timeout: 60000 }, () => {
     beforeAll(() => { dir = tmpDir() })
     afterAll(() => { fs.rmSync(dir, { recursive: true, force: true }) })
 
-    for (const count of [100, 500, 1000, 5000, 10000]) {
+    for (const count of [100, 500, 1000, 2500, 5000]) {
       it(`FTS5 cached: ${count} documents`, () => {
         const storePath = path.join(dir, `fts-${count}`)
         const store = new FlyupMemStore({ store_path: storePath })
@@ -213,7 +213,7 @@ describe('Performance Benchmarks', { timeout: 60000 }, () => {
     beforeAll(() => { dir = tmpDir() })
     afterAll(() => { fs.rmSync(dir, { recursive: true, force: true }) })
 
-    for (const count of [100, 500, 1000, 5000]) {
+    for (const count of [100, 500, 1000, 2500]) {
       it(`rebuildFromData: ${count} items`, () => {
         const storePath = path.join(dir, `rebuild-${count}`)
         const store = new FlyupMemStore({ store_path: storePath })

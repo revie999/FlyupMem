@@ -1,5 +1,27 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-02 — Git Sync MVP Dogfood ✅ PASS
+
+**新增能力：**
+- `flyupmem sync init [remote]`：初始化 store Git 仓库，可配置 origin
+- `flyupmem sync status`：查看 branch / remote / dirty files / ahead-behind
+- `flyupmem sync push`：提交并推送 YAML/config 源数据，忽略 SQLite 派生缓存
+- `flyupmem sync pull`：拉取远端并重建 SQLite cache
+- `flyupmem sync`：先 pull 后 push 的一键同步
+
+**验证：**
+- `npm test`：22 files / 149 TS tests + 8 Python boundary tests 全绿
+- `npm run test:sync`：5 个真实 Git 集成测试全绿
+- `npm run test:benchmark`：17 个性能 smoke benchmark 全绿
+- `npm run build`：TypeScript 编译通过
+- dist CLI dogfood：临时 store + bare remote 完整 `init → learn → status → push → pull → sync` 通过
+
+**测试组织调整：**
+- `sync.integration.test.ts` 从默认单测拆出到 `npm run test:sync`，避免真实 Git I/O 影响默认测试稳定性。
+- `benchmark.test.ts` 从默认单测拆出到 `npm run test:benchmark`，并降低 smoke 规模，避免同步 SQLite 写入导致 Vitest worker RPC timeout。
+
+---
+
 ### 2026-05-02 — v0.5.1 Hermes Dogfood ✅ PASS
 
 **验证环境：** Gateway，Hermes provider: flyupmem (active)

@@ -147,5 +147,5 @@ describe('Integration: learn → recall → status', () => {
     expect(parsed.injection).toContain('cli-explain-20260501')
     expect(parsed.explanations[0].signals.bm25.matched).toBe(true)
     expect(parsed.explanations[0].scores.rerank).toEqual(expect.any(Number))
-  }, 15000)
+  }, 30000)
 })

@@ -11,8 +11,10 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run && python3 -m unittest tests/hermes_plugin_boundary_test.py -v",
-    "test:ts": "vitest run",
+    "test": "vitest run --exclude tests/sync.integration.test.ts --exclude tests/benchmark.test.ts && python3 -m unittest tests/hermes_plugin_boundary_test.py -v",
+    "test:ts": "vitest run --exclude tests/sync.integration.test.ts --exclude tests/benchmark.test.ts",
+    "test:benchmark": "vitest run tests/benchmark.test.ts --poolOptions.forks.singleFork",
+    "test:sync": "vitest run tests/sync.integration.test.ts",
     "test:hermes-plugin": "python3 -m unittest tests/hermes_plugin_boundary_test.py -v",
     "test:watch": "vitest",
     "dev": "tsx src/index.ts"

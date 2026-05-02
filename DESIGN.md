@@ -1404,7 +1404,7 @@ recall 含 BM25 + 语义 + 图谱 + 时序 + activation 加权 + 8 维 rerank �
 - [ ] LLM 增强提取
 - [ ] Reflect 精简版
 - [ ] Knowledge Pack 导出/导入
-- [ ] Git sync（跨机记忆同步）
+- [x] Git sync（跨机记忆同步）— MVP: init/status/push/pull/sync，YAML 为源，SQLite 为可重建派生缓存
 
 ### Phase 5 — 生产化 *(v3)*
 - [ ] doctor / setup / status 命令
