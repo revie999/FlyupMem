@@ -185,8 +185,8 @@ export async function recallWithExplanation(
   const documents = allMemories.map(m => ({ id: m.id, text: m.statement }))
   const semanticAvailable = isEmbeddingAvailable()
 
-  // ─── Signal 1: BM25 (always available) ──────────────────────
-  const bm25Results = bm25Search(query, documents, 30)
+  // ─── Signal 1: BM25 (always available, FTS5 accelerated) ───
+  const bm25Results = bm25Search(query, documents, 30, store.cache)
 
   // ─── Signal 2: Semantic (if embedding model loaded) ─────────
   let semanticResults: ScoredResult[] = []

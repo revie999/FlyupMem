@@ -22,6 +22,7 @@ const CONFIG_KEYS: Record<string, { type: 'string' | 'number' | 'boolean'; descr
   'decay_enabled': { type: 'boolean', description: 'Enable ACT-R activation decay' },
   'consolidation_enabled': { type: 'boolean', description: 'Enable auto-consolidation (engram → observation)' },
   'embedding_enabled': { type: 'boolean', description: 'Enable BGE-small-zh embedding for semantic search' },
+  'sqlite_enabled': { type: 'boolean', description: 'Enable SQLite FTS5 cache for accelerated BM25 search' },
   'log_level': { type: 'string', description: 'Log level', values: ['debug', 'info', 'warn', 'error'] },
 }
 

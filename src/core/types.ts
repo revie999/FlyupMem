@@ -228,6 +228,7 @@ export interface FlyupMemConfig {
   decay_enabled: boolean       // default true
   consolidation_enabled: boolean // default true
   embedding_enabled: boolean   // default false (Phase 2)
+  sqlite_enabled: boolean      // default true — FTS5 cache acceleration
   log_level: 'debug' | 'info' | 'warn' | 'error'
 }
 
@@ -238,5 +239,6 @@ export const DEFAULT_CONFIG: FlyupMemConfig = {
   decay_enabled: true,
   consolidation_enabled: true,
   embedding_enabled: false,
+  sqlite_enabled: true,
   log_level: 'info',
 }

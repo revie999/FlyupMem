@@ -13,6 +13,7 @@ import {
   EngramSchema, ObservationSchema, MentalModelSchema,
   EpisodeSchema, GraphDataSchema, FeedbackEntrySchema,
 } from './schema.js'
+import { SQLiteCache } from './sqlite-cache.js'
 
 function expandHome(p: string): string {
   return p.replace(/^~/, os.homedir())
@@ -32,6 +33,7 @@ function atomicWriteSync(filePath: string, data: string): void {
 export class FlyupMemStore {
   readonly basePath: string
   readonly config: FlyupMemConfig
+  readonly cache: SQLiteCache
 
   private _engrams: Engram[] = []
   private _observations: Observation[] = []
@@ -49,6 +51,10 @@ export class FlyupMemStore {
       ...config,
     }
     this.basePath = expandHome(this.config.store_path)
+    this.cache = new SQLiteCache({
+      dbPath: path.join(this.basePath, 'index.sqlite'),
+      enabled: this.config.sqlite_enabled,
+    })
   }
 
   // ─── File paths ─────────────────────────────────────────────
@@ -76,6 +82,20 @@ export class FlyupMemStore {
     this._graph = this.loadYamlOne<GraphData>(this.paths.graph, GraphDataSchema) ?? { entities: {}, edges: [] }
     this._feedback = this.loadYaml<FeedbackEntry>(this.paths.feedback, FeedbackEntrySchema)
     this._loaded = true
+
+    // Open SQLite cache and rebuild indexes
+    try {
+      this.cache.open()
+      if (this.cache.isAvailable) {
+        this.cache.rebuildFromData({
+          engrams: this._engrams,
+          observations: this._observations,
+          mentalModels: this._mentalModels,
+        })
+      }
+    } catch {
+      // SQLite is optional — don't fail load if cache has issues
+    }
   }
 
   private loadYaml<T>(filePath: string, schema: { safeParse: (data: unknown) => { success: boolean; data?: T } }): T[] {
@@ -144,13 +164,20 @@ export class FlyupMemStore {
   // ─── Mutations ──────────────────────────────────────────────
   addEngram(engram: Engram): void {
     this._engrams.push(engram)
+    this.cache.syncEngram(engram)
   }
 
   updateEngram(id: string, updates: Partial<Engram>): void {
     const idx = this._engrams.findIndex(e => e.id === id)
     if (idx >= 0) {
       this._engrams[idx] = { ...this._engrams[idx], ...updates }
+      this.cache.syncEngram(this._engrams[idx])
     }
+  }
+
+  removeEngram(id: string): void {
+    this._engrams = this._engrams.filter(e => e.id !== id)
+    this.cache.removeItem(id)
   }
 
   addObservation(obs: Observation): void {

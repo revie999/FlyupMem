@@ -27,6 +27,14 @@ export function flyupStatus(store: FlyupMemStore): StatusResult {
   if (obs > 0) parts.push(`${obs} observations`)
   if (mm > 0) parts.push(`${mm} mental models`)
   parts.push(`graph: ${stats.graphEntities} entities, ${stats.graphEdges} edges`)
+
+  // SQLite cache stats
+  const cacheStats = store.cache.stats()
+  if (cacheStats.ftsRows > 0) {
+    const sizeKB = (cacheStats.dbSizeBytes / 1024).toFixed(1)
+    parts.push(`sqlite: ${cacheStats.ftsRows} fts, ${cacheStats.metaRows} meta, ${sizeKB}KB`)
+  }
+
   if (stats.feedback > 0) parts.push(`${stats.feedback} feedback entries`)
   if (!health.ok) parts.push(`⚠ ${health.issues.join('; ')}`)
 
