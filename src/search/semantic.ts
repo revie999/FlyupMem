@@ -1,7 +1,8 @@
-// src/search/semantic.ts — Semantic search via embeddings
+// src/search/semantic.ts — Semantic search via embeddings with SQLite cache
 
 import type { Memory, ScoredResult } from '../core/types.js'
-import { embed, cosineSimilarity, isEmbeddingAvailable } from './embed.js'
+import type { FlyupMemStore } from '../core/store.js'
+import { embed, embedBatch, cosineSimilarity, isEmbeddingAvailable } from './embed.js'
 
 const MIN_SEMANTIC_SCORE = 0.5
 
@@ -14,20 +15,25 @@ export function isSemanticAvailable(): boolean {
 
 /**
  * Semantic search: find memories by cosine similarity of embeddings.
+ * Uses SQLite cache for embedding vectors to avoid recomputation.
  * Returns empty if embedding model is unavailable.
  */
 export async function semanticSearch(
   query: string,
   memories: Memory[],
   limit = 30,
+  store?: FlyupMemStore,
 ): Promise<ScoredResult[]> {
-  const queryEmb = await embed(query)
+  const queryEmb = await embed(query, store?.cache)
   if (!queryEmb) return []
+
+  // Batch embed all memories (cache-aware)
+  const items = memories.map(m => ({ text: m.statement, cacheKey: m.id }))
+  const embeddings = await embedBatch(items, store?.cache)
 
   const scored: ScoredResult[] = []
   for (const mem of memories) {
-    // Embeddings should be pre-computed and stored; for now, compute on the fly
-    const memEmb = await embed(mem.statement)
+    const memEmb = embeddings.get(mem.id)
     if (!memEmb) continue
     const score = cosineSimilarity(queryEmb, memEmb)
     if (score >= MIN_SEMANTIC_SCORE) {

@@ -32,7 +32,8 @@ export function flyupStatus(store: FlyupMemStore): StatusResult {
   const cacheStats = store.cache.stats()
   if (cacheStats.ftsRows > 0) {
     const sizeKB = (cacheStats.dbSizeBytes / 1024).toFixed(1)
-    parts.push(`sqlite: ${cacheStats.ftsRows} fts, ${cacheStats.metaRows} meta, ${sizeKB}KB`)
+    const vecPart = cacheStats.vecRows > 0 ? `, ${cacheStats.vecRows} vec` : ''
+    parts.push(`sqlite: ${cacheStats.ftsRows} fts, ${cacheStats.metaRows} meta${vecPart}, ${sizeKB}KB`)
   }
 
   if (stats.feedback > 0) parts.push(`${stats.feedback} feedback entries`)

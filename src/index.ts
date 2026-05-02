@@ -17,6 +17,8 @@ import { initEmbedder } from './search/embed.js'
 
 // Re-export Phase 1-3
 export { FlyupMemStore } from './core/store.js'
+export { SQLiteCache } from './core/sqlite-cache.js'
+export type { SQLiteCacheConfig, FTSResult, MetaRow } from './core/sqlite-cache.js'
 export type * from './core/types.js'
 export { flyupLearn, flyupRecall, flyupRecallExplain, flyupStatus, flyupFeedback, flyupMaintain }
 export { flyupDoctor } from './tools/flyup_doctor.js'
@@ -34,7 +36,7 @@ export { tokenize } from './search/tokenize.js'
 export { contentHash } from './core/hash.js'
 export { generateId } from './core/id.js'
 export { decayedStrength, computeActivation, reactivate, statusFromStrength } from './lifecycle/decay.js'
-export { embed, cosineSimilarity, isEmbeddingAvailable, initEmbedder } from './search/embed.js'
+export { embed, embedBatch, cosineSimilarity, isEmbeddingAvailable, initEmbedder } from './search/embed.js'
 export { semanticSearch, isSemanticAvailable } from './search/semantic.js'
 export { graphExpansion } from './search/graph.js'
 export { temporalSearch, extractTimeReference } from './search/temporal.js'

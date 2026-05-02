@@ -191,7 +191,7 @@ export async function recallWithExplanation(
   // ─── Signal 2: Semantic (if embedding model loaded) ─────────
   let semanticResults: ScoredResult[] = []
   if (semanticAvailable) {
-    semanticResults = await semanticSearch(query, allMemories, 30)
+    semanticResults = await semanticSearch(query, allMemories, 30, store)
   }
 
   // ─── Signal 3: Temporal ─────────────────────────────────────
