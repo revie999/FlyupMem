@@ -4,6 +4,11 @@
 
 ### Added
 
+- Added automatic Engram YAML archive splitting:
+  - `engrams.yaml` now keeps only the newest/hot tail capped by `max_engrams_per_file` (default `5000`).
+  - Older engrams are written to numbered chunks under `engrams.d/engrams-000001.yaml`, `engrams-000002.yaml`, etc.
+  - Existing single-file stores remain readable; chunked stores load archive chunks plus `engrams.yaml`.
+  - Unchanged archive chunk files are not rewritten on subsequent saves, reducing long-term YAML write pressure.
 - Added Benchmark CLI for local performance baselines:
   - `flyupmem benchmark --counts 1000,5000,10000 --iterations 3 --format markdown --out file`.
   - JSON/Markdown output modes for automation and human review.

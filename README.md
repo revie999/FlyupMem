@@ -106,7 +106,8 @@ The YAML store is the source of truth:
 ```text
 ~/.flyupmem/
   config.yaml
-  engrams.yaml
+  engrams.yaml              # hot tail, capped by max_engrams_per_file
+  engrams.d/                # archived chunks: engrams-000001.yaml, ...
   observations.yaml
   mental-models.yaml
   episodes.yaml
@@ -116,6 +117,8 @@ The YAML store is the source of truth:
 ```
 
 SQLite is a rebuildable cache. If it is missing or invalid, FlyupMem can rebuild it from YAML.
+
+Engrams are split automatically when the in-memory list grows beyond `max_engrams_per_file` (default `5000`). `engrams.yaml` keeps the newest/hot tail, older entries move into numbered YAML chunks under `engrams.d/`. Existing single-file stores remain readable; chunked stores load `engrams.d/*.yaml` plus `engrams.yaml`.
 
 ## Session Recovery
 

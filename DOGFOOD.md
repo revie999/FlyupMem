@@ -1,5 +1,29 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-04 — Engram Archive Splitting ✅ PASS
+
+**新增能力：**
+- `FlyupMemStore` 自动把 Engram YAML 分成热尾部和 archive chunks。
+- `engrams.yaml` 保留最新/热尾部，大小由 `max_engrams_per_file` 控制（默认 5000）。
+- 旧 Engram 写入 `engrams.d/engrams-000001.yaml`、`engrams-000002.yaml` 等编号文件。
+- 读取兼容旧单文件 store；新 chunked store 会加载 `engrams.d/*.yaml + engrams.yaml`。
+- 保存时比较文件内容，只重写变化的 archive chunk，避免每次 learn/save 全量重写旧 chunk。
+- 保留重复 ID，不在 load 阶段静默去重，确保 `doctor` 仍能发现损坏 store。
+
+**验证：**
+- `npm run build`：通过。
+- 目标测试：`tests/doctor.test.ts` + `tests/store.test.ts` 单 fork 通过，17/17。
+- 全量 TS 默认套件：23 files / 185 tests 通过。
+- Python Hermes plugin boundary：8/8 通过。
+- `npm run test:benchmark`：3/3 通过。
+- `npm run test:sync`：5/5 通过。
+- 隔离 dogfood：temp store 写入 5 条，`max_engrams_per_file=2`，生成 2 个 archive chunk，`engrams.yaml` 热尾部 2 条，重载总数 5。
+
+**说明：**
+- 这一步主要降低长期 YAML 体积和 learn/save 写入压力；recall 热路径已由 write-light SQLite 激活写回解决。
+
+---
+
 ### 2026-05-02 — Incremental Sync + Conflict Resolution ✅ PASS
 
 **新增能力 — Incremental Sync：**

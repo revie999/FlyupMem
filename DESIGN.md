@@ -76,10 +76,12 @@ L4 Experience    ←── 交互日志，快速衰减
 
 YAML 是 source of truth。SQLite / embedding cache 都是派生物，可随时从 YAML 重建。*(共通)*
 
-**增长策略：** 当单个 YAML 文件超过 5000 条或 5MB 时，按状态分片：
-- `engrams.yaml` — 仅保留 active + candidate
-- `engrams-archive.yaml` — retired + dormant（不参与日常检索，可手动清理）
-- 归档操作在 REM 调度中自动执行
+**增长策略：** Engram YAML 自动按数量分片，避免长期单文件无限膨胀：
+- `engrams.yaml` — 保留最新/热尾部，数量由 `max_engrams_per_file` 控制（默认 5000）。
+- `engrams.d/engrams-000001.yaml` 等 — 较早 Engram 的编号 archive chunks。
+- 读取时合并 `engrams.d/*.yaml + engrams.yaml`；旧版单文件 store 仍兼容。
+- 保存时只重写内容变化的 chunk，降低 learn/save 的长期 YAML I/O 压力。
+- SQLite 仍是可重建缓存，archive chunks 仍是 YAML source of truth。
 
 ### 4.2 Engram（L3）
 

@@ -80,6 +80,38 @@ describe('FlyupMemStore', () => {
     expect(store2.engrams[0].statement).toBe(eng.statement)
   })
 
+  it('splits engrams into archived chunks while preserving load order', () => {
+    const splitStore = new FlyupMemStore({ store_path: dir, max_engrams_per_file: 2 })
+    splitStore.load()
+    for (let i = 1; i <= 5; i++) {
+      const statement = `split marker ${i}`
+      splitStore.addEngram(makeEngram({
+        id: `ENG-20260504-20${i}`,
+        statement,
+        content_hash: contentHash(statement),
+      }))
+    }
+    splitStore.save()
+
+    expect(fs.existsSync(path.join(dir, 'engrams.yaml'))).toBe(true)
+    expect(fs.existsSync(path.join(dir, 'engrams.d', 'engrams-000001.yaml'))).toBe(true)
+    expect(fs.existsSync(path.join(dir, 'engrams.d', 'engrams-000002.yaml'))).toBe(true)
+
+    const fresh = new FlyupMemStore({ store_path: dir, max_engrams_per_file: 2 })
+    fresh.load()
+    expect(fresh.engrams.map(e => e.id)).toEqual([
+      'ENG-20260504-201',
+      'ENG-20260504-202',
+      'ENG-20260504-203',
+      'ENG-20260504-204',
+      'ENG-20260504-205',
+    ])
+
+    const hotYaml = fs.readFileSync(path.join(dir, 'engrams.yaml'), 'utf8')
+    expect(hotYaml).toContain('split marker 5')
+    expect(hotYaml).not.toContain('split marker 1')
+  })
+
   it('merges non-overlapping writes from stale store instances', () => {
     const storeA = new FlyupMemStore({ store_path: dir })
     const storeB = new FlyupMemStore({ store_path: dir })

@@ -35,6 +35,29 @@ function activationValue(a: { retrieval_strength: number; storage_strength: numb
   return (a.retrieval_strength + a.storage_strength) / 2
 }
 
+function chunkArray<T>(items: T[], chunkSize: number): T[][] {
+  const chunks: T[][] = []
+  for (let i = 0; i < items.length; i += chunkSize) chunks.push(items.slice(i, i + chunkSize))
+  return chunks
+}
+
+function listYamlFiles(dir: string): string[] {
+  if (!fs.existsSync(dir)) return []
+  return fs.readdirSync(dir)
+    .filter(name => name.endsWith('.yaml'))
+    .sort()
+    .map(name => path.join(dir, name))
+}
+
+function removeYamlFiles(dir: string): void {
+  if (!fs.existsSync(dir)) return
+  for (const filePath of listYamlFiles(dir)) fs.unlinkSync(filePath)
+}
+
+function sameFileContent(filePath: string, content: string): boolean {
+  return fs.existsSync(filePath) && fs.readFileSync(filePath, 'utf-8') === content
+}
+
 /**
  * Atomic write: write to tmp file, then rename.
  */
@@ -155,6 +178,7 @@ export class FlyupMemStore {
     const base = this.basePath
     return {
       engrams: path.join(base, 'engrams.yaml'),
+      engramChunks: path.join(base, 'engrams.d'),
       observations: path.join(base, 'observations.yaml'),
       mentalModels: path.join(base, 'mental-models.yaml'),
       episodes: path.join(base, 'episodes.yaml'),
@@ -216,8 +240,15 @@ export class FlyupMemStore {
     }
   }
 
+  private loadEngrams(): Engram[] {
+    const chunks = listYamlFiles(this.paths.engramChunks).flatMap(filePath => this.loadYaml<Engram>(filePath, EngramSchema))
+    const hot = this.loadYaml<Engram>(this.paths.engrams, EngramSchema)
+    // Preserve duplicate IDs so doctor can detect corrupt stores instead of silently hiding them.
+    return [...chunks, ...hot]
+  }
+
   private reloadFromDisk(): void {
-    this._engrams = this.loadYaml<Engram>(this.paths.engrams, EngramSchema)
+    this._engrams = this.loadEngrams()
     this._observations = this.loadYaml<Observation>(this.paths.observations, ObservationSchema)
     this._mentalModels = this.loadYaml<MentalModel>(this.paths.mentalModels, MentalModelSchema)
     this._episodes = this.loadYaml<Episode>(this.paths.episodes, EpisodeSchema)
@@ -258,12 +289,41 @@ export class FlyupMemStore {
 
   private writeAll(): void {
     const p = this.paths
-    atomicWriteSync(p.engrams, yaml.dump(this._engrams, { lineWidth: 120, noRefs: true }))
+    this.writeEngrams()
     atomicWriteSync(p.observations, yaml.dump(this._observations, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.mentalModels, yaml.dump(this._mentalModels, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.episodes, yaml.dump(this._episodes, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.graph, yaml.dump(this._graph, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.feedback, yaml.dump(this._feedback, { lineWidth: 120, noRefs: true }))
+  }
+
+  private writeEngrams(): void {
+    const p = this.paths
+    const chunkSize = Math.max(1, this.config.max_engrams_per_file)
+    if (this._engrams.length <= chunkSize) {
+      const hotContent = yaml.dump(this._engrams, { lineWidth: 120, noRefs: true })
+      if (!sameFileContent(p.engrams, hotContent)) atomicWriteSync(p.engrams, hotContent)
+      removeYamlFiles(p.engramChunks)
+      return
+    }
+
+    const hotStart = Math.max(0, this._engrams.length - chunkSize)
+    const archived = this._engrams.slice(0, hotStart)
+    const hot = this._engrams.slice(hotStart)
+    fs.mkdirSync(p.engramChunks, { recursive: true })
+    const expectedFiles = new Set<string>()
+    chunkArray(archived, chunkSize).forEach((chunk, index) => {
+      const fileName = `engrams-${String(index + 1).padStart(6, '0')}.yaml`
+      const filePath = path.join(p.engramChunks, fileName)
+      expectedFiles.add(filePath)
+      const content = yaml.dump(chunk, { lineWidth: 120, noRefs: true })
+      if (!sameFileContent(filePath, content)) atomicWriteSync(filePath, content)
+    })
+    for (const filePath of listYamlFiles(p.engramChunks)) {
+      if (!expectedFiles.has(filePath)) fs.unlinkSync(filePath)
+    }
+    const hotContent = yaml.dump(hot, { lineWidth: 120, noRefs: true })
+    if (!sameFileContent(p.engrams, hotContent)) atomicWriteSync(p.engrams, hotContent)
   }
 
   private refreshSnapshots(): void {
@@ -276,7 +336,7 @@ export class FlyupMemStore {
   }
 
   private mergeLatestFromDisk(): void {
-    const latestEngrams = this.loadYaml<Engram>(this.paths.engrams, EngramSchema)
+    const latestEngrams = this.loadEngrams()
     const latestObservations = this.loadYaml<Observation>(this.paths.observations, ObservationSchema)
     const latestMentalModels = this.loadYaml<MentalModel>(this.paths.mentalModels, MentalModelSchema)
     const latestEpisodes = this.loadYaml<Episode>(this.paths.episodes, EpisodeSchema)
