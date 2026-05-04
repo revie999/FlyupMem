@@ -47,6 +47,8 @@ describe('FlyupMemPlugin', () => {
     )
     const store = plugin.getStore()
     expect(store.engrams.length).toBeGreaterThanOrEqual(1)
+    expect(store.episodes.length).toBeGreaterThanOrEqual(1)
+    expect(store.episodes[0].created_engram_ids.length).toBeGreaterThanOrEqual(1)
   })
 
   it('recalls via onAssemble', async () => {
@@ -111,6 +113,18 @@ describe('FlyupMemPlugin', () => {
       { role: 'assistant', content: '好的' },
     ])
     expect(plugin.getStore().engrams.length).toBeGreaterThanOrEqual(1)
+    expect(plugin.getStore().episodes.some(ep => ep.kind === 'summary')).toBe(true)
+  })
+
+  it('records checkpoints and exposes recovery context', async () => {
+    await plugin.onStartup()
+    plugin.checkpoint('pr-opened', {
+      summary: 'Opened draft PR for memory hardening',
+      next_steps: ['review CI'],
+    })
+    const context = plugin.recoveryContext()
+    expect(context).toContain('pr-opened')
+    expect(context).toContain('review CI')
   })
 
   it('handles onScheduled without errors', async () => {

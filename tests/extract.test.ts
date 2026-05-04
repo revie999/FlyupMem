@@ -28,7 +28,7 @@ describe('extractEngramsFromTurn', () => {
       '好的',
     )
     expect(results.length).toBeGreaterThan(0)
-    expect(results[0].statement).toContain('记住')
+    expect(results.some(r => r.statement.includes('记住') || r.statement.includes('端口是 7897'))).toBe(true)
   })
 
   it('returns empty for non-matching input', () => {
@@ -108,5 +108,42 @@ describe('extractEngramsFromTurn', () => {
     )
     const ids = results.map(r => r.id)
     expect(new Set(ids).size).toBe(ids.length)
+  })
+
+  it('redacts API keys while remembering secret configuration', () => {
+    const results = extractEngramsFromTurn(
+      '我的 OpenAI API key 是 sk-abcdefghijklmnopqrstuvwxyz123456',
+      '收到',
+    )
+    expect(results).toHaveLength(1)
+    expect(results[0].statement).toContain('不得保存或复述原始')
+    expect(results[0].statement).not.toContain('sk-abcdefghijklmnopqrstuvwxyz123456')
+    expect(results[0].source.quote).not.toContain('sk-abcdefghijklmnopqrstuvwxyz123456')
+    expect(results[0].tags).toContain('redacted')
+    expect(results[0].domain).toBe('environment/secrets')
+  })
+
+  it('extracts environment path url and port facts', () => {
+    const results = extractEngramsFromTurn(
+      '项目路径是 ~/Developer/FlyupMem，后台地址是 https://example.dev/admin，端口是 7897',
+      '好的',
+    )
+    expect(results.map(r => r.statement)).toEqual(expect.arrayContaining([
+      '项目路径是 ~/Developer/FlyupMem。',
+      '相关 URL 是 https://example.dev/admin。',
+      '运行环境端口是 7897。',
+    ]))
+  })
+
+  it('extracts project facts and procedural knowledge', () => {
+    const results = extractEngramsFromTurn(
+      'FlyupMem 是我的记忆插件。遇到 tsx EPERM 就去沙箱外跑测试。',
+      '好的',
+    )
+    expect(results.map(r => r.statement)).toEqual(expect.arrayContaining([
+      'FlyupMem 是用户的记忆插件。',
+      '遇到 tsx EPERM 时，应 去沙箱外跑测试。',
+    ]))
+    expect(results.some(r => r.tags.includes('skill'))).toBe(true)
   })
 })

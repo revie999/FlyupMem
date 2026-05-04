@@ -41,6 +41,8 @@ flyupmem recall "<query>" [--explain]
 flyupmem feedback <memory-id> <positive|negative|neutral>
 flyupmem maintain
 flyupmem doctor
+flyupmem checkpoint <label> [summary]
+flyupmem recover
 flyupmem config show
 flyupmem config set embedding_enabled true
 flyupmem embed-init
@@ -114,9 +116,20 @@ The YAML store is the source of truth:
 
 SQLite is a rebuildable cache. If it is missing or invalid, FlyupMem can rebuild it from YAML.
 
-## Current Concurrency Limit
+## Session Recovery
 
-YAML writes are atomic per file, but there is not yet a cross-process lock around the full read-modify-write cycle. Avoid running multiple writers against the same store at the exact same time. This matters when Hermes, MCP clients, and CLI maintenance all target the same `~/.flyupmem` directory.
+FlyupMem records lightweight episode summaries during plugin turns and compaction. You can also record explicit milestones:
+
+```bash
+flyupmem checkpoint tests-passed "TypeScript and Hermes boundary tests passed"
+flyupmem recover
+```
+
+`recover` prints recent episode/checkpoint context intended as low-priority startup context. It does not promote summaries into Mental Models or Observations by itself.
+
+## Concurrency
+
+YAML writes use a `.lock` file plus atomic rename. Saves also merge against the latest on-disk snapshot so independent writers are less likely to overwrite each other. SQLite remains a rebuildable cache.
 
 ## Development
 

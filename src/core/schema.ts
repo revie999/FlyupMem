@@ -158,6 +158,7 @@ export const MentalModelSchema = z.object({
 // ─── Episode ───────────────────────────────────────────────────
 export const EpisodeSchema = z.object({
   id: z.string(),
+  kind: z.enum(['turn', 'summary', 'checkpoint']).optional(),
   timestamp: z.string(),
   agent: z.string(),
   channel: z.string(),
@@ -165,6 +166,9 @@ export const EpisodeSchema = z.object({
   summary: z.string(),
   tags: z.array(z.string()),
   created_engram_ids: z.array(z.string()),
+  checkpoint_label: z.string().optional(),
+  next_steps: z.array(z.string()).optional(),
+  context: z.string().optional(),
 })
 
 // ─── Graph ─────────────────────────────────────────────────────

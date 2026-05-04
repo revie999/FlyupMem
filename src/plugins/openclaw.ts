@@ -123,13 +123,21 @@ export class FlyupMemPlugin {
     if (!this.config.autoLearn) return
 
     try {
-      flyupLearn(userMsg, assistantMsg, this.store, this.config.origin)
+      const learnResult = flyupLearn(userMsg, assistantMsg, this.store, this.config.origin)
+      this.store.captureEpisodeSummary(userMsg, assistantMsg, learnResult.engramIds, {
+        agent: ctx?.agent ?? this.config.origin,
+        channel: ctx?.channel ?? 'openclaw',
+        scope: ctx?.scope ?? 'global',
+        kind: 'turn',
+        tags: learnResult.stored > 0 ? ['learned'] : [],
+      })
 
       // Update graph for newly created engrams
       const { maintainGraph } = await import('../lifecycle/graph-maintain.js')
       for (const eng of this.store.engrams.slice(-5)) { // last 5 new engrams
         maintainGraph(eng as any, this.store)
       }
+      this.store.save()
     } catch {
       // Learning failure is non-fatal
     }
@@ -147,6 +155,18 @@ export class FlyupMemPlugin {
           flyupLearn(messages[i].content, messages[i + 1].content, this.store, this.config.origin)
         }
       }
+      const summaryText = messages
+        .slice(-8)
+        .map(m => `${m.role}: ${m.content.replace(/\s+/g, ' ').slice(0, 120)}`)
+        .join('\n')
+      this.store.captureEpisodeSummary(summaryText, '', [], {
+        agent: this.config.origin,
+        channel: 'compact',
+        scope: 'global',
+        kind: 'summary',
+        tags: ['compact', 'summary'],
+      })
+      this.store.save()
     } catch {
       // Non-fatal
     }
@@ -198,6 +218,22 @@ export class FlyupMemPlugin {
   status() {
     const { flyupStatus } = { flyupStatus: (s: FlyupMemStore) => ({ stats: s.stats(), health: s.healthCheck() }) }
     return flyupStatus(this.store)
+  }
+
+  /**
+   * Record a milestone for later recovery.
+   */
+  checkpoint(label: string, data?: { summary?: string; next_steps?: string[]; context?: string; tags?: string[] }) {
+    const episode = this.store.captureCheckpoint(label, data)
+    this.store.save()
+    return episode
+  }
+
+  /**
+   * Return recent episode/checkpoint context for startup recovery.
+   */
+  recoveryContext(limit?: number): string {
+    return this.store.getRecoveryContext(limit)
   }
 }
 

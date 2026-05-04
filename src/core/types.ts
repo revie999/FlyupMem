@@ -192,6 +192,7 @@ export interface MentalModel {
 // ─── Episode ───────────────────────────────────────────────────
 export interface Episode {
   id: string
+  kind?: 'turn' | 'summary' | 'checkpoint'
   timestamp: string
   agent: string
   channel: string
@@ -199,6 +200,9 @@ export interface Episode {
   summary: string
   tags: string[]
   created_engram_ids: string[]
+  checkpoint_label?: string
+  next_steps?: string[]
+  context?: string
 }
 
 // ─── Graph ─────────────────────────────────────────────────────

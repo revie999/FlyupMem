@@ -79,6 +79,43 @@ describe('FlyupMemStore', () => {
     expect(store2.engrams[0].statement).toBe(eng.statement)
   })
 
+  it('merges non-overlapping writes from stale store instances', () => {
+    const storeA = new FlyupMemStore({ store_path: dir })
+    const storeB = new FlyupMemStore({ store_path: dir })
+    storeA.load()
+    storeB.load()
+
+    storeA.addEngram(makeEngram({ id: 'ENG-20260504-101', statement: 'A writes first', content_hash: contentHash('A writes first') }))
+    storeA.save()
+
+    storeB.addEngram(makeEngram({ id: 'ENG-20260504-102', statement: 'B writes second', content_hash: contentHash('B writes second') }))
+    storeB.save()
+
+    const fresh = new FlyupMemStore({ store_path: dir })
+    fresh.load()
+    expect(fresh.engrams.map(e => e.id)).toEqual(expect.arrayContaining(['ENG-20260504-101', 'ENG-20260504-102']))
+  })
+
+  it('records checkpoints and produces recovery context', () => {
+    store.load()
+    store.captureEpisodeSummary('记住：端口是 7897', '好的', ['ENG-1'], {
+      agent: 'test',
+      channel: 'unit',
+      tags: ['summary'],
+    })
+    store.captureCheckpoint('tests-passed', {
+      summary: 'TypeScript tests passed',
+      next_steps: ['open PR'],
+    })
+    store.save()
+
+    const fresh = new FlyupMemStore({ store_path: dir })
+    const context = fresh.getRecoveryContext()
+    expect(context).toContain('Recent FlyupMem Session Context')
+    expect(context).toContain('TypeScript tests passed')
+    expect(context).toContain('next: open PR')
+  })
+
   it('finds by hash', () => {
     store.load()
     const eng = makeEngram()

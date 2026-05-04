@@ -82,11 +82,12 @@ describe('Knowledge Pack', () => {
   it('skips duplicates on import', () => {
     flyupLearn('记住：端口是 7897', '好的', store)
     const content = exportKnowledgePack(store, 'yaml')
+    const originalCount = store.engrams.length
 
     // Import into same store (should skip)
     const result = importKnowledgePack(store, content, 'yaml')
     expect(result.imported).toBe(0)
-    expect(result.skipped).toBe(1)
+    expect(result.skipped).toBe(originalCount)
   })
 
   it('exports/imports via file', () => {

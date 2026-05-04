@@ -238,6 +238,26 @@ async function main() {
       break
     }
 
+    case 'checkpoint': {
+      const label = args[1]
+      if (!label) {
+        console.error('Usage: flyupmem checkpoint <label> [summary]')
+        process.exit(1)
+      }
+      const summary = args.slice(2).join(' ') || label
+      store.load()
+      const episode = store.captureCheckpoint(label, { summary })
+      store.save()
+      console.log(JSON.stringify(episode, null, 2))
+      break
+    }
+
+    case 'recover': {
+      store.load()
+      console.log(store.getRecoveryContext())
+      break
+    }
+
     case 'review': {
       const limitIdx = args.indexOf('--limit')
       const queryIdx = args.indexOf('--query')
@@ -341,6 +361,8 @@ Usage:
   flyupmem doctor                            # Deep health check
   flyupmem setup [--force]                   # Environment check + store init
   flyupmem inspect <memory-id> [--json]      # Inspect memory detail & activation
+  flyupmem checkpoint <label> [summary]      # Record a recovery checkpoint
+  flyupmem recover                           # Print recent session/checkpoint context
   flyupmem review [--limit N] [--query q] [--batch] # Review low-value/test memory candidates (--batch: no limit)
   flyupmem prune [--apply] [--id ID|--tag T]        # Retire review candidates (dry-run by default)
   flyupmem prune --all                               # Batch retire all review candidates

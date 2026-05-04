@@ -9,6 +9,7 @@ import type {
   GraphData, FeedbackEntry, Memory, FlyupMemConfig,
 } from './types.js'
 import { DEFAULT_CONFIG } from './types.js'
+import { generateEpisodeId } from './id.js'
 import {
   EngramSchema, ObservationSchema, MentalModelSchema,
   EpisodeSchema, GraphDataSchema, FeedbackEntrySchema,
@@ -30,6 +31,68 @@ function atomicWriteSync(filePath: string, data: string): void {
   fs.renameSync(tmp, filePath)
 }
 
+function stableJson(data: unknown): string {
+  return JSON.stringify(data)
+}
+
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+function acquireLockSync(lockPath: string, timeoutMs = 5_000): () => void {
+  fs.mkdirSync(path.dirname(lockPath), { recursive: true })
+  const start = Date.now()
+  while (true) {
+    try {
+      const fd = fs.openSync(lockPath, 'wx')
+      fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, created_at: new Date().toISOString() }))
+      fs.closeSync(fd)
+      return () => {
+        try { fs.unlinkSync(lockPath) } catch {}
+      }
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code !== 'EEXIST') throw err
+      try {
+        const ageMs = Date.now() - fs.statSync(lockPath).mtimeMs
+        if (ageMs > timeoutMs * 3) {
+          fs.unlinkSync(lockPath)
+          continue
+        }
+      } catch {}
+      if (Date.now() - start > timeoutMs) {
+        throw new Error(`Timed out waiting for FlyupMem store lock: ${lockPath}`)
+      }
+      sleepSync(50)
+    }
+  }
+}
+
+function mergeBySnapshot<T extends { id: string }>(
+  latest: T[],
+  current: T[],
+  snapshot: Map<string, string>,
+): T[] {
+  if (new Set(current.map(item => item.id)).size !== current.length) {
+    return current
+  }
+  const result = new Map(latest.map(item => [item.id, item]))
+  const currentIds = new Set(current.map(item => item.id))
+
+  for (const [id] of snapshot) {
+    if (!currentIds.has(id)) result.delete(id)
+  }
+
+  for (const item of current) {
+    const before = snapshot.get(item.id)
+    if (before === undefined || before !== stableJson(item)) {
+      result.set(item.id, item)
+    }
+  }
+
+  return [...result.values()]
+}
+
 export class FlyupMemStore {
   readonly basePath: string
   readonly config: FlyupMemConfig
@@ -42,6 +105,14 @@ export class FlyupMemStore {
   private _graph: GraphData = { entities: {}, edges: [] }
   private _feedback: FeedbackEntry[] = []
   private _loaded = false
+  private _snapshots = {
+    engrams: new Map<string, string>(),
+    observations: new Map<string, string>(),
+    mentalModels: new Map<string, string>(),
+    episodes: new Map<string, string>(),
+    feedback: new Map<string, string>(),
+    graph: '',
+  }
 
   constructor(config?: Partial<FlyupMemConfig>) {
     const envStorePath = process.env.FLYUPMEM_STORE_PATH
@@ -68,6 +139,7 @@ export class FlyupMemStore {
       graph: path.join(base, 'graph.yaml'),
       feedback: path.join(base, 'feedback.yaml'),
       config: path.join(base, 'config.yaml'),
+      lock: path.join(base, '.lock'),
     }
   }
 
@@ -82,6 +154,7 @@ export class FlyupMemStore {
     this._graph = this.loadYamlOne<GraphData>(this.paths.graph, GraphDataSchema) ?? { entities: {}, edges: [] }
     this._feedback = this.loadYaml<FeedbackEntry>(this.paths.feedback, FeedbackEntrySchema)
     this._loaded = true
+    this.refreshSnapshots()
 
     // Open SQLite cache and rebuild indexes
     try {
@@ -128,6 +201,19 @@ export class FlyupMemStore {
 
   // ─── Save (atomic) ─────────────────────────────────────────
   save(): void {
+    fs.mkdirSync(this.basePath, { recursive: true })
+    if (!this._loaded) this._loaded = true
+    const release = acquireLockSync(this.paths.lock)
+    try {
+      this.mergeLatestFromDisk()
+      this.writeAll()
+      this.refreshSnapshots()
+    } finally {
+      release()
+    }
+  }
+
+  private writeAll(): void {
     const p = this.paths
     atomicWriteSync(p.engrams, yaml.dump(this._engrams, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.observations, yaml.dump(this._observations, { lineWidth: 120, noRefs: true }))
@@ -135,6 +221,31 @@ export class FlyupMemStore {
     atomicWriteSync(p.episodes, yaml.dump(this._episodes, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.graph, yaml.dump(this._graph, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.feedback, yaml.dump(this._feedback, { lineWidth: 120, noRefs: true }))
+  }
+
+  private refreshSnapshots(): void {
+    this._snapshots.engrams = new Map(this._engrams.map(item => [item.id, stableJson(item)]))
+    this._snapshots.observations = new Map(this._observations.map(item => [item.id, stableJson(item)]))
+    this._snapshots.mentalModels = new Map(this._mentalModels.map(item => [item.id, stableJson(item)]))
+    this._snapshots.episodes = new Map(this._episodes.map(item => [item.id, stableJson(item)]))
+    this._snapshots.feedback = new Map(this._feedback.map(item => [item.id, stableJson(item)]))
+    this._snapshots.graph = stableJson(this._graph)
+  }
+
+  private mergeLatestFromDisk(): void {
+    const latestEngrams = this.loadYaml<Engram>(this.paths.engrams, EngramSchema)
+    const latestObservations = this.loadYaml<Observation>(this.paths.observations, ObservationSchema)
+    const latestMentalModels = this.loadYaml<MentalModel>(this.paths.mentalModels, MentalModelSchema)
+    const latestEpisodes = this.loadYaml<Episode>(this.paths.episodes, EpisodeSchema)
+    const latestFeedback = this.loadYaml<FeedbackEntry>(this.paths.feedback, FeedbackEntrySchema)
+    const latestGraph = this.loadYamlOne<GraphData>(this.paths.graph, GraphDataSchema) ?? { entities: {}, edges: [] }
+
+    this._engrams = mergeBySnapshot(latestEngrams, this._engrams, this._snapshots.engrams)
+    this._observations = mergeBySnapshot(latestObservations, this._observations, this._snapshots.observations)
+    this._mentalModels = mergeBySnapshot(latestMentalModels, this._mentalModels, this._snapshots.mentalModels)
+    this._episodes = mergeBySnapshot(latestEpisodes, this._episodes, this._snapshots.episodes)
+    this._feedback = mergeBySnapshot(latestFeedback, this._feedback, this._snapshots.feedback)
+    this._graph = this._snapshots.graph === stableJson(this._graph) ? latestGraph : this._graph
   }
 
   // ─── Accessors ──────────────────────────────────────────────
@@ -190,6 +301,64 @@ export class FlyupMemStore {
 
   addEpisode(ep: Episode): void {
     this._episodes.push(ep)
+  }
+
+  captureEpisodeSummary(
+    userMsg: string,
+    assistantMsg: string,
+    createdEngramIds: string[] = [],
+    meta: Partial<Pick<Episode, 'agent' | 'channel' | 'scope' | 'tags' | 'kind'>> = {},
+  ): Episode {
+    const summary = summarizeTurn(userMsg, assistantMsg)
+    const episode: Episode = {
+      id: generateEpisodeId(),
+      kind: meta.kind ?? 'turn',
+      timestamp: new Date().toISOString(),
+      agent: meta.agent ?? 'unknown',
+      channel: meta.channel ?? 'unknown',
+      scope: meta.scope ?? 'global',
+      summary,
+      tags: meta.tags ?? [],
+      created_engram_ids: createdEngramIds,
+      context: [userMsg, assistantMsg].filter(Boolean).join('\n---\n').slice(0, 1000),
+    }
+    this.addEpisode(episode)
+    return episode
+  }
+
+  captureCheckpoint(label: string, data: { summary?: string; next_steps?: string[]; context?: string; tags?: string[] } = {}): Episode {
+    const episode: Episode = {
+      id: generateEpisodeId(),
+      kind: 'checkpoint',
+      timestamp: new Date().toISOString(),
+      agent: 'checkpoint',
+      channel: 'system',
+      scope: 'global',
+      summary: data.summary ?? label,
+      tags: ['checkpoint', ...(data.tags ?? [])],
+      created_engram_ids: [],
+      checkpoint_label: label,
+      next_steps: data.next_steps ?? [],
+      context: data.context,
+    }
+    this.addEpisode(episode)
+    return episode
+  }
+
+  getRecoveryContext(limit = 5): string {
+    this.load()
+    const recent = [...this._episodes]
+      .filter(ep => ep.kind === 'summary' || ep.kind === 'checkpoint' || ep.kind === 'turn')
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .slice(0, limit)
+    if (recent.length === 0) return ''
+    const lines = ['### Recent FlyupMem Session Context']
+    for (const ep of recent.reverse()) {
+      const label = ep.kind === 'checkpoint' && ep.checkpoint_label ? `checkpoint:${ep.checkpoint_label}` : (ep.kind ?? 'turn')
+      lines.push(`- [${ep.timestamp.slice(0, 16)} ${label}] ${ep.summary}`)
+      if (ep.next_steps?.length) lines.push(`  next: ${ep.next_steps.slice(0, 3).join('; ')}`)
+    }
+    return lines.join('\n')
   }
 
   addFeedback(fb: FeedbackEntry): void {
@@ -258,4 +427,11 @@ export class FlyupMemStore {
       feedback: this._feedback.length,
     }
   }
+}
+
+function summarizeTurn(userMsg: string, assistantMsg: string): string {
+  const user = userMsg.replace(/\s+/g, ' ').trim()
+  const assistant = assistantMsg.replace(/\s+/g, ' ').trim()
+  if (user && assistant) return `User: ${user.slice(0, 140)} | Assistant: ${assistant.slice(0, 140)}`
+  return (user || assistant || 'Empty turn').slice(0, 280)
 }
