@@ -46,6 +46,7 @@ flyupmem recover
 flyupmem config show
 flyupmem config set embedding_enabled true
 flyupmem embed-init
+flyupmem benchmark --counts 1000,5000,10000 --format markdown --out /tmp/flyupmem-benchmark.md
 ```
 
 `recall` is BM25-only by default. It does not download or initialize the embedding model unless `embedding_enabled` is true.
@@ -130,6 +131,17 @@ flyupmem recover
 ## Concurrency
 
 YAML writes use a `.lock` file plus atomic rename. Saves also merge against the latest on-disk snapshot so independent writers are less likely to overwrite each other. SQLite remains a rebuildable cache.
+
+## Benchmarking
+
+Use the benchmark CLI to measure the zero-cost local retrieval path before tuning archive or performance work:
+
+```bash
+flyupmem benchmark --counts 1000,5000,10000 --iterations 3 --format markdown --out /tmp/flyupmem-benchmark.md
+flyupmem benchmark --counts 1000 --iterations 1 --format json
+```
+
+The report covers population, YAML save/load, SQLite cache rebuild, FTS search, in-memory BM25 fallback, and the full recall pipeline. Benchmark stores are temporary by default unless `--store` or `--keep-store` is used.
 
 ## Development
 

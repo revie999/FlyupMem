@@ -15,6 +15,7 @@ import { flyupInspect } from './tools/flyup_inspect.js'
 import { configShow, configSet, configReset, configKeys } from './tools/flyup_config.js'
 import { flyupSyncInit, flyupSyncStatus, flyupSyncPull, flyupSyncPush, flyupSync } from './tools/flyup_sync.js'
 import { flyupReview, flyupPrune } from './tools/flyup_curate.js'
+import { flyupBenchmark, formatBenchmarkMarkdown, parseBenchmarkCounts } from './tools/flyup_benchmark.js'
 import { initEmbedder } from './search/embed.js'
 
 // Re-export Phase 1-3
@@ -36,6 +37,8 @@ export type { ConflictStrategy } from './tools/flyup_sync.js'
 export type { SyncInitResult, SyncStatusResult, SyncPullResult, SyncPushResult, SyncResult } from './tools/flyup_sync.js'
 export { flyupReview, flyupPrune } from './tools/flyup_curate.js'
 export type { ReviewResult, ReviewItem, ReviewOptions, PruneResult, PruneOptions } from './tools/flyup_curate.js'
+export { flyupBenchmark, formatBenchmarkMarkdown, parseBenchmarkCounts } from './tools/flyup_benchmark.js'
+export type { BenchmarkOptions, BenchmarkResult, BenchmarkScaleResult, MetricSummary } from './tools/flyup_benchmark.js'
 export { unifiedRecall, recallWithExplanation, formatInjection } from './search/recall.js'
 export { extractEngramsFromTurn } from './lifecycle/extract.js'
 export { bm25Search } from './search/bm25.js'
@@ -345,6 +348,34 @@ async function main() {
       break
     }
 
+    case 'benchmark': {
+      const countsIdx = args.indexOf('--counts')
+      const iterationsIdx = args.indexOf('--iterations')
+      const formatIdx = args.indexOf('--format')
+      const outIdx = args.indexOf('--out')
+      const storeIdx = args.indexOf('--store')
+      const format = formatIdx >= 0 ? args[formatIdx + 1] : 'markdown'
+      const result = await flyupBenchmark({
+        counts: parseBenchmarkCounts(countsIdx >= 0 ? args[countsIdx + 1] : undefined),
+        iterations: iterationsIdx >= 0 ? Number(args[iterationsIdx + 1]) : undefined,
+        storePath: storeIdx >= 0 ? args[storeIdx + 1] : undefined,
+        keepStore: args.includes('--keep-store'),
+      })
+      const output = format === 'json'
+        ? JSON.stringify(result, null, 2)
+        : formatBenchmarkMarkdown(result)
+      if (outIdx >= 0 && args[outIdx + 1]) {
+        const fs = await import('node:fs')
+        const path = await import('node:path')
+        fs.mkdirSync(path.dirname(args[outIdx + 1]), { recursive: true })
+        fs.writeFileSync(args[outIdx + 1], output + '\n', 'utf-8')
+        console.log(args[outIdx + 1])
+      } else {
+        console.log(output)
+      }
+      break
+    }
+
     default:
       console.log(`FlyupMem v0.5.1 — Local-first memory for AI agents
 
@@ -376,6 +407,7 @@ Usage:
   flyupmem sync pull                         # Pull remote changes + rebuild cache
   flyupmem sync push                         # Commit YAML/config changes + push
   flyupmem sync                              # Pull then push
+  flyupmem benchmark [--counts 1000,5000,10000] [--format json|markdown] [--out file]
 
 Environment:
   FLYUP_LLM_API_KEY     LLM API key (for reflect/LLM extraction)

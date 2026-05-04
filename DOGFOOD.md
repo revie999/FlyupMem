@@ -621,3 +621,30 @@ cp /Users/gm99/.hermes/config.yaml.bak.flyupmem-20260501-221432 ~/.hermes/config
 ```
 
 如果要让 Telegram 立即生效，需要重启 Hermes gateway；建议在确认不会打断正在进行的任务时执行。
+---
+
+### 2026-05-04 — Benchmark CLI ✅ PASS
+
+**新增能力：**
+- `flyupmem benchmark`：正式性能基准 CLI。
+- 支持 `--counts 1000,5000,10000`、`--iterations N`、`--format json|markdown`、`--out file`、`--store path`、`--keep-store`。
+- 指标覆盖 populate、YAML save/load、SQLite rebuild、FTS search、BM25 fallback、full recall pipeline、hit count、SQLite/YAML 体积。
+
+**验证：**
+- `npm run build`：通过。
+- `npm run test:benchmark`：3 tests passed。
+- Full TS suite（single-fork Vitest）：23 files / 181 tests passed。
+- Hermes plugin boundary：8 tests passed。
+- dist CLI dogfood：
+  - Markdown: `node dist/index.js benchmark --counts 1000,5000,10000 --iterations 3 --store <tmp> --format markdown --out /tmp/flyupmem-benchmark.md`。
+  - JSON sanity: `node dist/index.js benchmark --counts 100 --iterations 1 --format json`。
+
+**本机 1K/5K/10K 结果：**
+
+| count | populate | save | load | rebuild | FTS p50/p95 | BM25 p50/p95 | recall p50/p95 | hits | sqlite | yaml |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1000 | 871.93ms | 193.67ms | 337.7ms | 64.98ms | 2.4/2.85ms | 12.57/16.59ms | 229.69/347.17ms | 25 | 3.18 MB | 5.13 MB |
+| 5000 | 6638.54ms | 563.74ms | 1059.76ms | 592.04ms | 20.52/28.57ms | 49.56/56.56ms | 1359.76/1413.94ms | 25 | 12.89 MB | 15.64 MB |
+| 10000 | 25394.56ms | 1258.4ms | 2594.28ms | 1301.9ms | 46.89/53.1ms | 113.99/131.73ms | 2660.31/2697.31ms | 25 | 19.31 MB | 31.04 MB |
+
+**结论：** SQLite FTS 自身扩展性很好；5K/10K full recall 主要被 YAML save/load 与 recall 后 activation 持久化拖慢。下一步更适合做归档/分片或 write-light recall。

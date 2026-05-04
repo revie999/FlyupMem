@@ -1411,7 +1411,7 @@ recall 含 BM25 + 语义 + 图谱 + 时序 + activation 加权 + 8 维 rerank �
 - [ ] memory inspect UI
 - [ ] 配置面板
 - [x] memory review/prune CLI — 本地记忆质量维护，dry-run 默认，安全退休 dogfood/test marker
-- [ ] 性能监控 + 指标
+- [x] 性能监控 + 指标 — MVP: `flyupmem benchmark` measures 1K/5K/10K population, YAML save/load, SQLite rebuild, FTS, BM25 fallback, and full recall pipeline
 
 ---
 

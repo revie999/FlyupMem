@@ -3,6 +3,12 @@
 ## Unreleased
 
 ### Added
+
+- Added Benchmark CLI for local performance baselines:
+  - `flyupmem benchmark --counts 1000,5000,10000 --iterations 3 --format markdown --out file`.
+  - JSON/Markdown output modes for automation and human review.
+  - Measures population, YAML save/load, SQLite cache rebuild, FTS search, in-memory BM25 fallback, full recall pipeline, hit count, and store sizes.
+  - Exports benchmark helper APIs for tests and external automation.
 - Added Incremental Sync with Smart Debounce:
   - `flyupSyncPush` now only stages files that actually changed (`addChangedFiles` replaces `addTrackedFiles`).
   - New `stagedFiles` field in `SyncPushResult` shows which files were committed.
