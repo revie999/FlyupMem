@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import * as yaml from 'js-yaml'
 import { execFileSync } from 'node:child_process'
 import { FlyupMemStore } from '../src/core/store.js'
 import { flyupLearn } from '../src/tools/flyup_learn.js'
@@ -170,6 +171,49 @@ describe('Integration: learn → recall → status', () => {
     expect(fs.readFileSync(yamlPath, 'utf8')).toBe(beforeYaml)
     const meta = store.cache.metaGet(mem.id)
     expect(meta?.last_accessed).toBe(new Date().toISOString().slice(0, 10))
+  })
+
+  it('preserves SQLite recall activation across store reloads', async () => {
+    flyupLearn('记住：sqlite recall persistence marker 是 sqlite-recall-persist-20260504。', '好的', store)
+    const mem = store.engrams.find(e => e.statement.includes('sqlite-recall-persist-20260504'))!
+    const yamlPath = path.join(dir, 'engrams.yaml')
+    const docs = yaml.load(fs.readFileSync(yamlPath, 'utf8')) as any[]
+    docs[0].activation.last_accessed = '2000-01-01'
+    docs[0].activation.turn_count = 0
+    fs.writeFileSync(yamlPath, yaml.dump(docs, { lineWidth: 120, noRefs: true }))
+    store.cache.close()
+
+    const fresh = new FlyupMemStore({ store_path: dir })
+    fresh.load()
+    await recallWithExplanation('sqlite-recall-persist-20260504', fresh)
+    expect(fresh.cache.metaGet(mem.id)?.last_accessed).toBe(new Date().toISOString().slice(0, 10))
+    fresh.cache.close()
+
+    const reloaded = new FlyupMemStore({ store_path: dir })
+    reloaded.load()
+    expect(reloaded.cache.metaGet(mem.id)?.last_accessed).toBe(new Date().toISOString().slice(0, 10))
+    expect(reloaded.cachedActivationFor(reloaded.getEngramById(mem.id)!).last_accessed).toBe(new Date().toISOString().slice(0, 10))
+  })
+
+  it('off recall activation persistence does not mutate YAML through later saves', async () => {
+    const offStore = new FlyupMemStore({ store_path: dir, recall_activation_persistence: 'off' })
+    flyupLearn('记住：off recall persistence marker 是 off-recall-20260504。', '好的', offStore)
+    const yamlPath = path.join(dir, 'engrams.yaml')
+    const docs = yaml.load(fs.readFileSync(yamlPath, 'utf8')) as any[]
+    docs[0].activation.last_accessed = '2000-01-01'
+    docs[0].activation.turn_count = 0
+    fs.writeFileSync(yamlPath, yaml.dump(docs, { lineWidth: 120, noRefs: true }))
+    offStore.cache.close()
+
+    const fresh = new FlyupMemStore({ store_path: dir, recall_activation_persistence: 'off' })
+    fresh.load()
+    await recallWithExplanation('off-recall-20260504', fresh)
+    fresh.captureCheckpoint('after-off-recall', { summary: 'force save after off recall' })
+    fresh.save()
+
+    const after = yaml.load(fs.readFileSync(yamlPath, 'utf8')) as any[]
+    expect(after[0].activation.last_accessed).toBe('2000-01-01')
+    expect(after[0].activation.turn_count).toBe(0)
   })
 
   it('can opt into YAML recall activation persistence for durable ACT-R writes', async () => {

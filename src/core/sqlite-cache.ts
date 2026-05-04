@@ -4,7 +4,7 @@
 import Database from 'better-sqlite3'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
-import type { Engram, Observation, MentalModel } from './types.js'
+import type { Activation, Engram, Observation, MentalModel } from './types.js'
 
 export interface SQLiteCacheConfig {
   dbPath: string
@@ -25,13 +25,14 @@ export interface MetaRow {
   domain: string | null
   confidence: number
   activation: number
+  activation_json?: string | null
   last_accessed: string | null
   content_hash: string | null
   created_at: string
   updated_at: string
 }
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 const CREATE_TABLES = `
 CREATE TABLE IF NOT EXISTS schema_version (
@@ -52,6 +53,7 @@ CREATE TABLE IF NOT EXISTS memory_meta (
   domain TEXT,
   confidence INTEGER DEFAULT 5,
   activation REAL DEFAULT 1.0,
+  activation_json TEXT,
   last_accessed TEXT,
   content_hash TEXT,
   created_at TEXT NOT NULL,
@@ -139,14 +141,26 @@ export class SQLiteCache {
 
     // Create tables
     this.db.exec(CREATE_TABLES)
+    this.migrateSchema()
 
     // Check/set schema version
     const row = this.db.prepare('SELECT version FROM schema_version LIMIT 1').get() as { version: number } | undefined
     if (!row) {
       this.db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(SCHEMA_VERSION)
+    } else if (row.version < SCHEMA_VERSION) {
+      this.db.prepare('UPDATE schema_version SET version = ?').run(SCHEMA_VERSION)
     }
 
     this.prepareStatements()
+  }
+
+  private migrateSchema(): void {
+    const db = this.db!
+    const columns = db.prepare('PRAGMA table_info(memory_meta)').all() as Array<{ name: string }>
+    const names = new Set(columns.map(c => c.name))
+    if (!names.has('activation_json')) {
+      db.exec('ALTER TABLE memory_meta ADD COLUMN activation_json TEXT')
+    }
   }
 
   private prepareStatements(): void {
@@ -163,18 +177,18 @@ export class SQLiteCache {
         `UPDATE memory_fts SET statement = ?, summary = ?, tags = ?, scope = ?, domain = ? WHERE id = ?`
       ),
       metaUpsert: db.prepare(`
-        INSERT INTO memory_meta (id, layer, status, type, scope, domain, confidence, activation, last_accessed, content_hash, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO memory_meta (id, layer, status, type, scope, domain, confidence, activation, activation_json, last_accessed, content_hash, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           layer=excluded.layer, status=excluded.status, type=excluded.type,
           scope=excluded.scope, domain=excluded.domain,
-          confidence=excluded.confidence, activation=excluded.activation,
+          confidence=excluded.confidence, activation=excluded.activation, activation_json=excluded.activation_json,
           last_accessed=excluded.last_accessed, content_hash=excluded.content_hash,
           updated_at=excluded.updated_at
       `),
       metaUpdateActivation: db.prepare(`
         UPDATE memory_meta
-        SET activation = ?, last_accessed = ?, updated_at = ?
+        SET activation = ?, activation_json = ?, last_accessed = ?, updated_at = ?
         WHERE id = ?
       `),
       metaGet: db.prepare(`SELECT * FROM memory_meta WHERE id = ?`),
@@ -258,14 +272,14 @@ export class SQLiteCache {
     if (!this.isAvailable) return
     this.stmts.metaUpsert.run(
       row.id, row.layer, row.status, row.type, row.scope, row.domain,
-      row.confidence, row.activation, row.last_accessed, row.content_hash,
+      row.confidence, row.activation, row.activation_json ?? null, row.last_accessed, row.content_hash,
       row.created_at, row.updated_at,
     )
   }
 
-  updateActivation(id: string, activation: number, lastAccessed: string): void {
+  updateActivation(id: string, activation: number, lastAccessed: string, activationJson?: string | null): void {
     if (!this.isAvailable) return
-    this.stmts.metaUpdateActivation.run(activation, lastAccessed, new Date().toISOString(), id)
+    this.stmts.metaUpdateActivation.run(activation, activationJson ?? null, lastAccessed, new Date().toISOString(), id)
   }
 
   metaGet(id: string): MetaRow | undefined {
@@ -342,6 +356,10 @@ export class SQLiteCache {
     return (a.retrieval_strength + a.storage_strength) / 2
   }
 
+  private activationJson(a: Activation): string {
+    return JSON.stringify(a)
+  }
+
   /** Map Engram to FTS + meta row. */
   private engramToRows(e: Engram): { fts: { id: string; statement: string; summary: string; tags: string; scope: string; domain: string }; meta: MetaRow } {
     return {
@@ -362,6 +380,7 @@ export class SQLiteCache {
         domain: e.domain ?? null,
         confidence: e.confidence ?? 5,
         activation: this.activationValue(e.activation),
+        activation_json: this.activationJson(e.activation),
         last_accessed: e.activation?.last_accessed ?? null,
         content_hash: e.content_hash ?? null,
         created_at: e.temporal?.learned_at ?? new Date().toISOString(),
@@ -390,6 +409,7 @@ export class SQLiteCache {
         domain: o.domain ?? null,
         confidence: o.confidence ?? 5,
         activation: this.activationValue(o.activation),
+        activation_json: this.activationJson(o.activation),
         last_accessed: o.activation?.last_accessed ?? null,
         content_hash: null,
         created_at: o.temporal?.learned_at ?? o.history?.[0]?.at ?? new Date().toISOString(),
@@ -418,6 +438,7 @@ export class SQLiteCache {
         domain: m.domain ?? null,
         confidence: m.confidence ?? 8,
         activation: this.activationValue(m.activation),
+        activation_json: this.activationJson(m.activation),
         last_accessed: m.activation?.last_accessed ?? null,
         content_hash: null,
         created_at: m.temporal?.learned_at ?? new Date().toISOString(),
@@ -437,42 +458,62 @@ export class SQLiteCache {
     if (!this.isAvailable) return { indexed: 0 }
 
     const db = this.db!
+    const previousMeta = new Map(this.metaAll().map(row => [row.id, row]))
 
     const rebuild = db.transaction(() => {
       db.exec('DELETE FROM memory_fts')
       db.exec('DELETE FROM memory_meta')
 
       let count = 0
+      const preserveRecallActivation = (row: MetaRow): MetaRow => {
+        const previous = previousMeta.get(row.id)
+        if (!previous?.activation_json) return row
+        const previousTime = Date.parse(previous.updated_at)
+        const rowTime = Date.parse(row.updated_at)
+        if (Number.isFinite(previousTime) && Number.isFinite(rowTime) && previousTime > rowTime) {
+          return {
+            ...row,
+            activation: previous.activation,
+            activation_json: previous.activation_json,
+            last_accessed: previous.last_accessed,
+            updated_at: previous.updated_at,
+          }
+        }
+        return row
+      }
 
       for (const e of data.engrams) {
         const rows = this.engramToRows(e)
+        rows.meta = preserveRecallActivation(rows.meta)
         this.stmts.ftsInsert.run(rows.fts.id, rows.fts.statement, rows.fts.summary, rows.fts.tags, rows.fts.scope, rows.fts.domain)
         this.stmts.metaUpsert.run(
           rows.meta.id, rows.meta.layer, rows.meta.status, rows.meta.type,
           rows.meta.scope, rows.meta.domain, rows.meta.confidence, rows.meta.activation,
-          rows.meta.last_accessed, rows.meta.content_hash, rows.meta.created_at, rows.meta.updated_at,
+          rows.meta.activation_json ?? null, rows.meta.last_accessed, rows.meta.content_hash, rows.meta.created_at, rows.meta.updated_at,
         )
         count++
       }
 
       for (const o of data.observations) {
         const rows = this.observationToRows(o)
+        rows.meta = preserveRecallActivation(rows.meta)
         this.stmts.ftsInsert.run(rows.fts.id, rows.fts.statement, rows.fts.summary, rows.fts.tags, rows.fts.scope, rows.fts.domain)
         this.stmts.metaUpsert.run(
           rows.meta.id, rows.meta.layer, rows.meta.status, rows.meta.type,
           rows.meta.scope, rows.meta.domain, rows.meta.confidence, rows.meta.activation,
-          rows.meta.last_accessed, rows.meta.content_hash, rows.meta.created_at, rows.meta.updated_at,
+          rows.meta.activation_json ?? null, rows.meta.last_accessed, rows.meta.content_hash, rows.meta.created_at, rows.meta.updated_at,
         )
         count++
       }
 
       for (const m of data.mentalModels) {
         const rows = this.mentalModelToRows(m)
+        rows.meta = preserveRecallActivation(rows.meta)
         this.stmts.ftsInsert.run(rows.fts.id, rows.fts.statement, rows.fts.summary, rows.fts.tags, rows.fts.scope, rows.fts.domain)
         this.stmts.metaUpsert.run(
           rows.meta.id, rows.meta.layer, rows.meta.status, rows.meta.type,
           rows.meta.scope, rows.meta.domain, rows.meta.confidence, rows.meta.activation,
-          rows.meta.last_accessed, rows.meta.content_hash, rows.meta.created_at, rows.meta.updated_at,
+          rows.meta.activation_json ?? null, rows.meta.last_accessed, rows.meta.content_hash, rows.meta.created_at, rows.meta.updated_at,
         )
         count++
       }

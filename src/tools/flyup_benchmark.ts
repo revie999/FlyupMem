@@ -315,6 +315,25 @@ export function formatBenchmarkMarkdown(result: BenchmarkResult): string {
 
 export function parseBenchmarkCounts(value: string | undefined): number[] | undefined {
   if (!value) return undefined
-  const counts = value.split(',').map(v => Number(v.trim())).filter(n => Number.isFinite(n) && n > 0)
-  return counts.length ? counts : undefined
+  const rawCounts = value.split(',').map(v => v.trim())
+  const counts = rawCounts.map(v => Number(v))
+  if (rawCounts.some(v => v === '') || counts.some(n => !Number.isInteger(n) || n <= 0)) {
+    throw new Error('Invalid --counts: expected comma-separated positive integers, e.g. --counts 1000,5000,10000')
+  }
+  return counts
+}
+
+export function parseBenchmarkIterations(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined
+  const iterations = Number(value)
+  if (!Number.isInteger(iterations) || iterations <= 0) {
+    throw new Error('Invalid --iterations: expected a positive integer')
+  }
+  return iterations
+}
+
+export function parseBenchmarkFormat(value: string | undefined): 'json' | 'markdown' {
+  if (value === undefined) return 'markdown'
+  if (value === 'json' || value === 'markdown') return value
+  throw new Error('Invalid --format: expected json or markdown')
 }

@@ -217,8 +217,9 @@ export async function recallWithExplanation(
   const withActivation = fused.map(({ id, score: rrfScore }) => {
     const mem = allMemories.find(m => m.id === id)
     if (!mem) return { id, score: rrfScore, memory: null as any }
+    const activationState = store.cachedActivationFor(mem)
     const activation = computeActivation(
-      mem.activation,
+      activationState,
       mem.layer as any,
       mem.emotional_weight ?? 5,
     )
@@ -228,7 +229,7 @@ export async function recallWithExplanation(
     return {
       id,
       score: activationWeighted,
-      memory: mem,
+      memory: { ...mem, activation: activationState },
     }
   }).filter(r => r.memory !== null)
 
@@ -256,20 +257,23 @@ export async function recallWithExplanation(
   let needsSave = false
   const persistence = store.config.recall_activation_persistence
   for (const mem of trimmed) {
-    if ('activation' in mem && mem.activation) {
-      mem.activation.turn_count = (mem.activation.turn_count ?? 0) + 1
-      mem.activation.last_accessed = today
+    if ('activation' in mem && mem.activation && persistence !== 'off') {
+      const nextActivation = {
+        ...store.cachedActivationFor(mem),
+        turn_count: (store.cachedActivationFor(mem).turn_count ?? 0) + 1,
+        last_accessed: today,
+      }
       if (persistence === 'yaml') {
         if ('consolidated' in mem) {
-          store.updateEngram(mem.id, { activation: mem.activation } as any)
+          store.updateEngram(mem.id, { activation: nextActivation } as any)
         } else if (mem.layer === 'observation') {
-          store.updateObservation(mem.id, { activation: mem.activation } as any)
+          store.updateObservation(mem.id, { activation: nextActivation } as any)
         } else if (mem.layer === 'mental_model') {
-          store.updateMentalModel(mem.id, { activation: mem.activation } as any)
+          store.updateMentalModel(mem.id, { activation: nextActivation } as any)
         }
         needsSave = true
       } else if (persistence === 'sqlite') {
-        store.updateActivationCacheOnly(mem)
+        store.updateActivationCacheOnly(mem, nextActivation)
       }
     }
   }

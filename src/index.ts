@@ -15,7 +15,7 @@ import { flyupInspect } from './tools/flyup_inspect.js'
 import { configShow, configSet, configReset, configKeys } from './tools/flyup_config.js'
 import { flyupSyncInit, flyupSyncStatus, flyupSyncPull, flyupSyncPush, flyupSync } from './tools/flyup_sync.js'
 import { flyupReview, flyupPrune } from './tools/flyup_curate.js'
-import { flyupBenchmark, formatBenchmarkMarkdown, parseBenchmarkCounts } from './tools/flyup_benchmark.js'
+import { flyupBenchmark, formatBenchmarkMarkdown, parseBenchmarkCounts, parseBenchmarkFormat, parseBenchmarkIterations } from './tools/flyup_benchmark.js'
 import { initEmbedder } from './search/embed.js'
 
 // Re-export Phase 1-3
@@ -37,7 +37,7 @@ export type { ConflictStrategy } from './tools/flyup_sync.js'
 export type { SyncInitResult, SyncStatusResult, SyncPullResult, SyncPushResult, SyncResult } from './tools/flyup_sync.js'
 export { flyupReview, flyupPrune } from './tools/flyup_curate.js'
 export type { ReviewResult, ReviewItem, ReviewOptions, PruneResult, PruneOptions } from './tools/flyup_curate.js'
-export { flyupBenchmark, formatBenchmarkMarkdown, parseBenchmarkCounts } from './tools/flyup_benchmark.js'
+export { flyupBenchmark, formatBenchmarkMarkdown, parseBenchmarkCounts, parseBenchmarkFormat, parseBenchmarkIterations } from './tools/flyup_benchmark.js'
 export type { BenchmarkOptions, BenchmarkResult, BenchmarkScaleResult, MetricSummary } from './tools/flyup_benchmark.js'
 export { unifiedRecall, recallWithExplanation, formatInjection } from './search/recall.js'
 export { extractEngramsFromTurn } from './lifecycle/extract.js'
@@ -354,10 +354,22 @@ async function main() {
       const formatIdx = args.indexOf('--format')
       const outIdx = args.indexOf('--out')
       const storeIdx = args.indexOf('--store')
-      const format = formatIdx >= 0 ? args[formatIdx + 1] : 'markdown'
+      const usage = 'Usage: flyupmem benchmark [--counts 1000,5000,10000] [--iterations N] [--format json|markdown] [--out file] [--store path] [--keep-store]'
+      let format: 'json' | 'markdown'
+      let counts: number[] | undefined
+      let iterations: number | undefined
+      try {
+        counts = parseBenchmarkCounts(countsIdx >= 0 ? args[countsIdx + 1] : undefined)
+        iterations = parseBenchmarkIterations(iterationsIdx >= 0 ? args[iterationsIdx + 1] : undefined)
+        format = parseBenchmarkFormat(formatIdx >= 0 ? args[formatIdx + 1] : undefined)
+      } catch (err) {
+        console.error((err as Error).message)
+        console.error(usage)
+        process.exit(1)
+      }
       const result = await flyupBenchmark({
-        counts: parseBenchmarkCounts(countsIdx >= 0 ? args[countsIdx + 1] : undefined),
-        iterations: iterationsIdx >= 0 ? Number(args[iterationsIdx + 1]) : undefined,
+        counts,
+        iterations,
         storePath: storeIdx >= 0 ? args[storeIdx + 1] : undefined,
         keepStore: args.includes('--keep-store'),
       })

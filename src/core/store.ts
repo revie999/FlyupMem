@@ -6,7 +6,7 @@ import * as os from 'node:os'
 import * as yaml from 'js-yaml'
 import type {
   Engram, Observation, MentalModel, Episode,
-  GraphData, FeedbackEntry, Memory, FlyupMemConfig,
+  GraphData, FeedbackEntry, Memory, FlyupMemConfig, Activation,
 } from './types.js'
 import { DEFAULT_CONFIG } from './types.js'
 import { generateEpisodeId } from './id.js'
@@ -33,6 +33,30 @@ function loadStoredConfig(basePath: string): Partial<FlyupMemConfig> {
 
 function activationValue(a: { retrieval_strength: number; storage_strength: number }): number {
   return (a.retrieval_strength + a.storage_strength) / 2
+}
+
+function parseActivationJson(value: string | null | undefined): Activation | undefined {
+  if (!value) return undefined
+  try {
+    const parsed = JSON.parse(value) as Partial<Activation>
+    if (
+      typeof parsed.retrieval_strength === 'number' &&
+      typeof parsed.storage_strength === 'number' &&
+      typeof parsed.frequency === 'number' &&
+      typeof parsed.last_accessed === 'string'
+    ) {
+      const activation: Activation = {
+        retrieval_strength: parsed.retrieval_strength,
+        storage_strength: parsed.storage_strength,
+        frequency: parsed.frequency,
+        turn_count: 0,
+        last_accessed: parsed.last_accessed,
+      }
+      if (typeof parsed.turn_count === 'number') activation.turn_count = parsed.turn_count
+      return activation
+    }
+  } catch {}
+  return undefined
 }
 
 function chunkArray<T>(items: T[], chunkSize: number): T[][] {
@@ -375,6 +399,11 @@ export class FlyupMemStore {
     return this._engrams.find(e => e.id === id)
   }
 
+  cachedActivationFor(mem: Memory): Activation {
+    const cached = parseActivationJson(this.cache.metaGet(mem.id)?.activation_json)
+    return cached ?? mem.activation
+  }
+
   // ─── Mutations ──────────────────────────────────────────────
   addEngram(engram: Engram): void {
     this._engrams.push(engram)
@@ -389,15 +418,15 @@ export class FlyupMemStore {
     }
   }
 
-  updateActivationCacheOnly(mem: Memory): void {
-    if (!mem.activation) return
+  updateActivationCacheOnly(mem: Memory, activation: Activation = mem.activation): void {
     if (!this.cache.metaGet(mem.id)) {
-      if ('consolidated' in mem) this.cache.syncEngram(mem)
-      else if (mem.layer === 'observation') this.cache.syncObservation(mem)
-      else if (mem.layer === 'mental_model') this.cache.syncMentalModel(mem)
+      const cached = { ...mem, activation } as Memory
+      if ('consolidated' in cached) this.cache.syncEngram(cached)
+      else if (cached.layer === 'observation') this.cache.syncObservation(cached)
+      else if (cached.layer === 'mental_model') this.cache.syncMentalModel(cached)
       return
     }
-    this.cache.updateActivation(mem.id, activationValue(mem.activation), mem.activation.last_accessed)
+    this.cache.updateActivation(mem.id, activationValue(activation), activation.last_accessed, JSON.stringify(activation))
   }
 
   removeEngram(id: string): void {
