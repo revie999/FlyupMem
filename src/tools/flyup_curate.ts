@@ -1,10 +1,11 @@
 // src/tools/flyup_curate.ts — Review and retire low-value/test memories
 
-import type { Engram } from '../core/types.js'
+import type { Engram, Memory } from '../core/types.js'
 import type { FlyupMemStore } from '../core/store.js'
 
 export interface ReviewItem {
   id: string
+  layer: Memory['layer']
   status: Engram['status']
   statement: string
   confidence: number
@@ -79,86 +80,142 @@ const ENGINEERING_FRAGMENT_PATTERNS = [
   /\biterations?\b/i,
   /\bcounts?\b/i,
   /\bNaN\b/,
+  /\b\d+K(?:\/\d+K)+\b/i,
 ]
 
-function isLowContextEngineeringFragment(e: Engram): boolean {
-  const statement = e.statement.trim()
-  if (e.status !== 'active' && e.status !== 'candidate') return false
-  if (e.domain !== 'general') return false
-  if (e.tags.length > 0) return false
-  if (e.confidence > 5) return false
+const MALFORMED_EXTRACTION_PATTERNS = [
+  /记住：.*"\s+"好的[）)]?"?$/,
+  /默认端口是\s*7897"\s+"好的[）)]?"?$/,
+]
+
+const CONVERSATIONAL_FRAGMENT_PATTERNS = [
+  /^别的账号呢[？?]?$/,
+  /^不是已经.+[？?]$/,
+]
+
+function sourceText(mem: Memory): string {
+  if ('source' in mem) return `${mem.source.quote}\n${mem.source.origin}`
+  if ('title' in mem) return mem.title ?? ''
+  return ''
+}
+
+function isLowContextEngineeringFragment(mem: Memory): boolean {
+  const statement = mem.statement.trim()
+  if (mem.status !== 'active' && mem.status !== 'candidate') return false
+  if (mem.domain !== 'general') return false
+  if (mem.tags.length > 0) return false
+  if (mem.confidence > 5) return false
   if (statement.length > 80) return false
   return ENGINEERING_FRAGMENT_PATTERNS.some(re => re.test(statement))
 }
 
-function includesQuery(e: Engram, query?: string): boolean {
+function isLowContextConversationalFragment(mem: Memory): boolean {
+  const statement = mem.statement.trim()
+  if (mem.status !== 'active' && mem.status !== 'candidate') return false
+  if (mem.domain !== 'general') return false
+  if (mem.tags.length > 0) return false
+  if (mem.confidence > 5) return false
+  if (statement.length > 40) return false
+  return CONVERSATIONAL_FRAGMENT_PATTERNS.some(re => re.test(statement))
+}
+
+function isMalformedExtractionArtifact(mem: Memory): boolean {
+  const texts = [mem.statement, sourceText(mem)]
+  if (mem.status !== 'active' && mem.status !== 'candidate') return false
+  if (mem.domain !== 'general') return false
+  if (mem.tags.length > 0) return false
+  return texts.some(text => MALFORMED_EXTRACTION_PATTERNS.some(re => re.test(text)))
+}
+
+function includesQuery(mem: Memory, query?: string): boolean {
   if (!query) return true
   const q = query.toLowerCase()
   return [
-    e.id,
-    e.statement,
-    e.rationale,
-    e.source.quote,
-    e.source.origin,
-    e.domain,
-    ...e.tags,
+    mem.id,
+    mem.statement,
+    sourceText(mem),
+    mem.domain,
+    ...mem.tags,
   ].some(value => value.toLowerCase().includes(q))
 }
 
-function reviewEngram(e: Engram): ReviewItem | null {
+function reviewMemory(mem: Memory): ReviewItem | null {
   const reasons: string[] = []
   let score = 0
 
-  if (e.tags.some(tag => TEST_TAGS.has(tag.toLowerCase()))) {
+  if (mem.tags.some(tag => TEST_TAGS.has(tag.toLowerCase()))) {
     reasons.push('dogfood/test tag')
     score += 3
   }
-  if (TEST_DOMAINS.has(e.domain.toLowerCase())) {
+  if (TEST_DOMAINS.has(mem.domain.toLowerCase())) {
     reasons.push('test domain')
     score += 2
   }
-  if (/test|benchmark|dogfood/i.test(e.source.origin)) {
+  if (/test|benchmark|dogfood/i.test(sourceText(mem))) {
     reasons.push('test source')
     score += 2
   }
-  const markerText = `${e.statement}\n${e.source.quote}`
+  const markerText = `${mem.statement}\n${sourceText(mem)}`
   if (MARKER_PATTERNS.some(re => re.test(markerText))) {
     reasons.push('test marker')
     score += 3
   }
-  if (isLowContextEngineeringFragment(e)) {
+  if (isLowContextEngineeringFragment(mem)) {
     reasons.push('low-context engineering fragment')
     score += 2
   }
-  if (e.status === 'candidate' && e.confidence <= 4) {
+  if (isLowContextConversationalFragment(mem)) {
+    reasons.push('low-context conversational fragment')
+    score += 2
+  }
+  if (isMalformedExtractionArtifact(mem)) {
+    reasons.push('malformed extraction artifact')
+    score += 4
+  }
+  if (mem.status === 'candidate' && mem.confidence <= 4) {
     reasons.push('low-confidence candidate')
     score += 1
   }
-  if (e.feedback.negative > e.feedback.positive) {
+  if ('feedback' in mem && mem.feedback.negative > mem.feedback.positive) {
     reasons.push('negative feedback')
     score += 2
   }
 
   if (!reasons.length) return null
   return {
-    id: e.id,
-    status: e.status,
-    statement: e.statement,
-    confidence: e.confidence,
-    tags: [...e.tags],
-    domain: e.domain,
+    id: mem.id,
+    layer: mem.layer,
+    status: mem.status,
+    statement: mem.statement,
+    confidence: mem.confidence,
+    tags: [...mem.tags],
+    domain: mem.domain,
     score,
     reasons,
+  }
+}
+
+function explicitItem(mem: Memory, reason: string): ReviewItem {
+  return {
+    id: mem.id,
+    layer: mem.layer,
+    status: mem.status,
+    statement: mem.statement,
+    confidence: mem.confidence,
+    tags: [...mem.tags],
+    domain: mem.domain,
+    score: 0,
+    reasons: [reason],
   }
 }
 
 export function flyupReview(store: FlyupMemStore, options: ReviewOptions = {}): ReviewResult {
   store.load()
   const limit = options.batch ? Number.MAX_SAFE_INTEGER : (options.limit ?? 50)
-  const items = store.engrams
-    .filter(e => options.includeRetired || e.status !== 'retired')
-    .filter(e => includesQuery(e, options.query))
-    .map(reviewEngram)
+  const items = store.allMemories()
+    .filter(mem => options.includeRetired || mem.status !== 'retired')
+    .filter(mem => includesQuery(mem, options.query))
+    .map(reviewMemory)
     .filter((item): item is ReviewItem => item !== null)
     .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
     .slice(0, limit)
@@ -174,37 +231,30 @@ export function flyupReview(store: FlyupMemStore, options: ReviewOptions = {}): 
 function selectForPrune(store: FlyupMemStore, options: PruneOptions): ReviewItem[] {
   if (options.ids?.length) {
     const wanted = new Set(options.ids)
-    return store.engrams
-      .filter(e => wanted.has(e.id))
-      .map(e => reviewEngram(e) ?? {
-        id: e.id,
-        status: e.status,
-        statement: e.statement,
-        confidence: e.confidence,
-        tags: [...e.tags],
-        domain: e.domain,
-        score: 0,
-        reasons: ['explicit id'],
-      })
+    return store.allMemories()
+      .filter(mem => wanted.has(mem.id))
+      .map(mem => reviewMemory(mem) ?? explicitItem(mem, 'explicit id'))
   }
 
   if (options.tag) {
-    return store.engrams
-      .filter(e => e.tags.includes(options.tag!))
-      .filter(e => includesQuery(e, options.query))
-      .map(e => reviewEngram(e) ?? {
-        id: e.id,
-        status: e.status,
-        statement: e.statement,
-        confidence: e.confidence,
-        tags: [...e.tags],
-        domain: e.domain,
-        score: 0,
-        reasons: [`tag:${options.tag}`],
-      })
+    return store.allMemories()
+      .filter(mem => mem.tags.includes(options.tag!))
+      .filter(mem => includesQuery(mem, options.query))
+      .map(mem => reviewMemory(mem) ?? explicitItem(mem, `tag:${options.tag}`))
   }
 
   return flyupReview(store, { query: options.query }).items
+}
+
+function retireMemory(store: FlyupMemStore, mem: Memory, today: string): void {
+  const updates = {
+    status: 'retired' as const,
+    tags: Array.from(new Set([...mem.tags, 'pruned'])),
+    temporal: { ...mem.temporal, valid_until: mem.temporal.valid_until ?? today },
+  }
+  if (mem.layer === 'raw') store.updateEngram(mem.id, updates as Partial<Engram>)
+  else if (mem.layer === 'observation') store.updateObservation(mem.id, updates as any)
+  else if (mem.layer === 'mental_model') store.updateMentalModel(mem.id, updates as any)
 }
 
 export function flyupPrune(store: FlyupMemStore, options: PruneOptions = {}): PruneResult {
@@ -226,27 +276,23 @@ export function flyupPrune(store: FlyupMemStore, options: PruneOptions = {}): Pr
   if (shouldApply) {
     const today = new Date().toISOString().slice(0, 10)
     for (const item of items) {
-      const e = store.getEngramById(item.id)
-      if (!e) {
+      const mem = store.getById(item.id)
+      if (!mem) {
         skipped.push({ id: item.id, reason: 'not found' })
         if (options.confirm) confirmDetails.push({ id: item.id, statement: item.statement, action: 'skipped', reason: 'not found' })
         continue
       }
-      if (e.status === 'locked') {
+      if (mem.status === 'locked') {
         skipped.push({ id: item.id, reason: 'locked memory is protected' })
         if (options.confirm) confirmDetails.push({ id: item.id, statement: item.statement, action: 'skipped', reason: 'locked' })
         continue
       }
-      if (e.status === 'retired') {
+      if (mem.status === 'retired') {
         skipped.push({ id: item.id, reason: 'already retired' })
         if (options.confirm) confirmDetails.push({ id: item.id, statement: item.statement, action: 'skipped', reason: 'already retired' })
         continue
       }
-      store.updateEngram(e.id, {
-        status: 'retired',
-        tags: Array.from(new Set([...e.tags, 'pruned'])),
-        temporal: { ...e.temporal, valid_until: e.temporal.valid_until ?? today },
-      })
+      retireMemory(store, mem, today)
       changed += 1
       if (options.confirm) confirmDetails.push({ id: item.id, statement: item.statement, action: 'retired', reason: item.reasons.join(', ') })
     }

@@ -5,7 +5,7 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 import { FlyupMemStore } from '../src/core/store.js'
 import { flyupReview, flyupPrune } from '../src/tools/flyup_curate.js'
-import type { Engram } from '../src/core/types.js'
+import type { Engram, Observation } from '../src/core/types.js'
 import { contentHash } from '../src/core/hash.js'
 
 function tmpDir(): string {
@@ -49,6 +49,33 @@ function makeEngram(overrides: Partial<Engram> = {}): Engram {
   }
 }
 
+function makeObservation(overrides: Partial<Observation> = {}): Observation {
+  const now = new Date().toISOString()
+  const today = now.slice(0, 10)
+  const statement = overrides.statement ?? '用户偏好结构化清单式分析。'
+  return {
+    id: overrides.id ?? `OBS-CURATE-${Math.random().toString(16).slice(2, 8)}`,
+    layer: 'observation',
+    status: 'active',
+    scope: 'global',
+    domain: 'general',
+    tags: [],
+    title: statement,
+    statement,
+    source_memory_ids: [],
+    proof_count: 1,
+    evidence: [],
+    trend: 'new',
+    confidence: 6,
+    activation: { retrieval_strength: 0.8, storage_strength: 0.8, frequency: 1, turn_count: 0, last_accessed: today },
+    emotional_weight: 5,
+    entities: [],
+    temporal: { learned_at: now, valid_from: today, valid_until: null },
+    history: [],
+    ...overrides,
+  }
+}
+
 describe('flyupCurate', () => {
   let dir: string
   let store: FlyupMemStore
@@ -87,13 +114,54 @@ describe('flyupCurate', () => {
     store.addEngram(makeEngram({ id: 'FRAG-001', statement: '不是真 persistence。', confidence: 5, domain: 'general' }))
     store.addEngram(makeEngram({ id: 'FRAG-002', statement: '不要 mutate 原对象。', confidence: 5, domain: 'general' }))
     store.addEngram(makeEngram({ id: 'FRAG-003', statement: '默认大规模 benchmark', confidence: 5, domain: 'general' }))
+    store.addEngram(makeEngram({ id: 'FRAG-004', statement: '默认 1K/5K/10K。', confidence: 5, domain: 'general' }))
     store.save()
 
     const result = flyupReview(store, { batch: true })
 
-    expect(result.items.map(i => i.id)).toEqual(expect.arrayContaining(['FRAG-001', 'FRAG-002', 'FRAG-003']))
+    expect(result.items.map(i => i.id)).toEqual(expect.arrayContaining(['FRAG-001', 'FRAG-002', 'FRAG-003', 'FRAG-004']))
     expect(result.items.find(i => i.id === 'FRAG-001')!.reasons).toContain('low-context engineering fragment')
+    expect(result.items.find(i => i.id === 'FRAG-004')!.reasons).toContain('low-context engineering fragment')
     expect(result.items.map(i => i.id)).not.toContain('NORMAL-PORT')
+  })
+
+  it('review flags low-context conversational fragments', () => {
+    store.addEngram(makeEngram({ id: 'CHAT-FRAG-001', statement: '别的账号呢', confidence: 5, domain: 'general' }))
+    store.addEngram(makeEngram({ id: 'CHAT-NORMAL-001', statement: '主人偏好先看 GitHub 远端分支再分析仓库。', confidence: 7, domain: 'workflow', tags: ['github'] }))
+    store.save()
+
+    const result = flyupReview(store, { batch: true })
+
+    expect(result.items.map(i => i.id)).toContain('CHAT-FRAG-001')
+    expect(result.items.find(i => i.id === 'CHAT-FRAG-001')!.reasons).toContain('low-context conversational fragment')
+    expect(result.items.map(i => i.id)).not.toContain('CHAT-NORMAL-001')
+  })
+
+  it('review flags malformed extraction artifacts across engrams and observations', () => {
+    store.addEngram(makeEngram({ id: 'ENG-20260504-901', statement: '记住：默认端口是 7897" "好的）"', confidence: 5, domain: 'general' }))
+    store.addObservation(makeObservation({ id: 'OBS-20260504-901', statement: '记住：默认端口是 7897" "好的）"', title: '记住：默认端口是 7897" "好的）"' }))
+    store.addEngram(makeEngram({ id: 'ENG-20260504-902', statement: '运行环境端口是 7897。', domain: 'environment/runtime', tags: ['port'] }))
+    store.save()
+
+    const result = flyupReview(store, { batch: true })
+
+    expect(result.items.map(i => i.id)).toEqual(expect.arrayContaining(['ENG-20260504-901', 'OBS-20260504-901']))
+    expect(result.items.find(i => i.id === 'OBS-20260504-901')!.layer).toBe('observation')
+    expect(result.items.find(i => i.id === 'OBS-20260504-901')!.reasons).toContain('malformed extraction artifact')
+    expect(result.items.map(i => i.id)).not.toContain('ENG-20260504-902')
+  })
+
+  it('prune retires matched observations as well as engrams', () => {
+    store.addObservation(makeObservation({ id: 'OBS-20260504-903', statement: '记住：默认端口是 7897" "好的）"', title: '记住：默认端口是 7897" "好的）"' }))
+    store.save()
+
+    const result = flyupPrune(store, { apply: true })
+    const fresh = new FlyupMemStore({ store_path: dir })
+    fresh.load()
+
+    expect(result.changed).toBe(1)
+    expect(fresh.observations.find(o => o.id === 'OBS-20260504-903')!.status).toBe('retired')
+    expect(fresh.observations.find(o => o.id === 'OBS-20260504-903')!.tags).toContain('pruned')
   })
 
   it('prune is dry-run by default and does not mutate YAML', () => {

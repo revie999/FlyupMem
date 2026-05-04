@@ -1,5 +1,35 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-04 — Real Store Recall Audit + Cross-Layer Curation ✅ PASS
+
+**背景：**
+- 真实 recall audit 发现两个问题：
+  - retired/pruned 记忆仍可能进入 recall 候选。
+  - 低上下文碎片会污染无关查询，例如 `别的账号呢`、`不是已经装到本地了？`、`默认 1K/5K/10K。`。
+- Observation 层也可能保存畸形提取产物，不能只审 Engram 层。
+
+**新增/修复：**
+- `recallWithExplanation()` 过滤 `retired` 记忆，避免已清理项继续召回。
+- `review/prune` 改为扫描三层 memory：Engram / Observation / MentalModel。
+- `prune` 使用 `updateEngram()` / `updateObservation()` / `updateMentalModel()`，保证 YAML 与 SQLite cache 同步。
+- 新增畸形提取产物规则：识别破碎 `记住：..." "好的）"` 类文本。
+- 新增低上下文对话碎片规则：识别短、general、无 tag、低 confidence 的裸回复。
+- 扩展工程碎片规则：覆盖 `1K/5K/10K` 这类孤立 benchmark 参数。
+
+**验证：**
+- TDD：`tests/curate.test.ts` 新增跨层 review/prune、畸形提取、对话碎片、benchmark 参数碎片测试。
+- TDD：`tests/recall.test.ts` 新增 retired memory 不召回测试。
+- `npx vitest run tests/curate.test.ts tests/recall.test.ts --pool=forks --poolOptions.forks.singleFork=true`：24/24 通过。
+- 默认 TS 套件（排除 sync/benchmark，single fork）：23 files / 192 tests 通过。
+- Python Hermes plugin boundary：8/8 通过。
+- `npm run build`：通过。
+- 真实 store dry-run：`review --batch` 当前返回 3 个待清理碎片：`ENG-20260503-002`、`ENG-20260504-009`、`ENG-20260504-013`。
+
+**安全性：**
+- 本轮真实 store 仅执行 dry-run recall/review audit；尚未对新发现 3 条执行 prune。
+
+---
+
 ### 2026-05-04 — Real Store Review Rule Dogfood ✅ PASS
 
 **背景：**

@@ -45,6 +45,8 @@
   - `flyupmem prune --apply` safely retires candidates instead of deleting them, tags them `pruned`, and protects `locked` memories.
 - Added tests and dist CLI dogfood coverage for review/prune workflows.
 - Review now flags low-context engineering fragments from debugging/review sessions, e.g. terse `persistence`/`mutate`/`benchmark` leftovers that are not useful long-term memories.
+- Review now scans all memory layers (`Engram`, `Observation`, `MentalModel`) and can retire matched non-Engram memories via the layer-specific update APIs.
+- Review now flags malformed extraction artifacts and low-context conversational fragments found during real-store recall audits, e.g. broken `记住：..." "好的）"` captures and bare replies like `别的账号呢`.
 - Added Git Sync CLI MVP for YAML-first store portability:
   - `flyupmem sync init [remote]`
   - `flyupmem sync status`

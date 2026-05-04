@@ -175,13 +175,17 @@ function buildReason(signals: RecallExplanation['signals']): string {
     : 'No retrieval signals matched'
 }
 
+function isRecallable(mem: Memory): boolean {
+  return mem.status !== 'retired'
+}
+
 export async function recallWithExplanation(
   query: string,
   store: FlyupMemStore,
   tokenBudget = TOKEN_BUDGET,
   queryScope?: string | null,
 ): Promise<RecallWithExplanationResult> {
-  const allMemories = store.allMemories()
+  const allMemories = store.allMemories().filter(isRecallable)
   const documents = allMemories.map(m => ({ id: m.id, text: m.statement }))
   const semanticEnabled = store.config.embedding_enabled
   const semanticAvailable = semanticEnabled

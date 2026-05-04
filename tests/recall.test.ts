@@ -93,6 +93,22 @@ describe('Integration: learn → recall → status', () => {
     expect(recallResult.injection).not.toContain('主人偏好直接给结论')
   })
 
+  it('does not recall retired memories', async () => {
+    flyupLearn('记住：retired recall marker 是 retired-recall-20260504。', '好的', store)
+    const mem = store.engrams.find(e => e.statement.includes('retired-recall-20260504'))!
+    store.updateEngram(mem.id, {
+      status: 'retired',
+      tags: [...mem.tags, 'pruned'],
+      temporal: { ...mem.temporal, valid_until: new Date().toISOString().slice(0, 10) },
+    })
+    store.save()
+
+    const result = await recallWithExplanation('retired-recall-20260504', store)
+
+    expect(result.memories.map(m => m.id)).not.toContain(mem.id)
+    expect(result.injection).toContain('(no relevant memories)')
+  })
+
   it('explains recall signal scores and final ranking for matched memories', async () => {
     flyupLearn('记住：FlyupMem explain marker 是 recall-explain-20260501。', '好的', store)
 
