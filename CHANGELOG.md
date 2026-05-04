@@ -44,6 +44,7 @@
   - `flyupmem prune` is dry-run by default.
   - `flyupmem prune --apply` safely retires candidates instead of deleting them, tags them `pruned`, and protects `locked` memories.
 - Added tests and dist CLI dogfood coverage for review/prune workflows.
+- Review now flags low-context engineering fragments from debugging/review sessions, e.g. terse `persistence`/`mutate`/`benchmark` leftovers that are not useful long-term memories.
 - Added Git Sync CLI MVP for YAML-first store portability:
   - `flyupmem sync init [remote]`
   - `flyupmem sync status`

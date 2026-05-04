@@ -82,6 +82,20 @@ describe('flyupCurate', () => {
     expect(result.items.map(i => i.id)).not.toContain('NORMAL-001')
   })
 
+  it('review flags terse engineering fragments from debugging/review sessions', () => {
+    store.addEngram(makeEngram({ id: 'NORMAL-PORT', statement: 'Clash 端口是 7897。', domain: 'environment/runtime', tags: ['port'] }))
+    store.addEngram(makeEngram({ id: 'FRAG-001', statement: '不是真 persistence。', confidence: 5, domain: 'general' }))
+    store.addEngram(makeEngram({ id: 'FRAG-002', statement: '不要 mutate 原对象。', confidence: 5, domain: 'general' }))
+    store.addEngram(makeEngram({ id: 'FRAG-003', statement: '默认大规模 benchmark', confidence: 5, domain: 'general' }))
+    store.save()
+
+    const result = flyupReview(store, { batch: true })
+
+    expect(result.items.map(i => i.id)).toEqual(expect.arrayContaining(['FRAG-001', 'FRAG-002', 'FRAG-003']))
+    expect(result.items.find(i => i.id === 'FRAG-001')!.reasons).toContain('low-context engineering fragment')
+    expect(result.items.map(i => i.id)).not.toContain('NORMAL-PORT')
+  })
+
   it('prune is dry-run by default and does not mutate YAML', () => {
     store.addEngram(makeEngram({ id: 'DOGFOOD-002', statement: 'hermes-provider-v051-explain-boundary marker', tags: ['dogfood'] }))
     store.save()

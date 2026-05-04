@@ -72,6 +72,25 @@ const MARKER_PATTERNS = [
   /\b[a-z]+(?:-[a-z0-9]+){2,}-\d{8,}/i,
 ]
 
+const ENGINEERING_FRAGMENT_PATTERNS = [
+  /\bbenchmark\b/i,
+  /\bpersistence\b/i,
+  /\bmutate\b/i,
+  /\biterations?\b/i,
+  /\bcounts?\b/i,
+  /\bNaN\b/,
+]
+
+function isLowContextEngineeringFragment(e: Engram): boolean {
+  const statement = e.statement.trim()
+  if (e.status !== 'active' && e.status !== 'candidate') return false
+  if (e.domain !== 'general') return false
+  if (e.tags.length > 0) return false
+  if (e.confidence > 5) return false
+  if (statement.length > 80) return false
+  return ENGINEERING_FRAGMENT_PATTERNS.some(re => re.test(statement))
+}
+
 function includesQuery(e: Engram, query?: string): boolean {
   if (!query) return true
   const q = query.toLowerCase()
@@ -106,6 +125,10 @@ function reviewEngram(e: Engram): ReviewItem | null {
   if (MARKER_PATTERNS.some(re => re.test(markerText))) {
     reasons.push('test marker')
     score += 3
+  }
+  if (isLowContextEngineeringFragment(e)) {
+    reasons.push('low-context engineering fragment')
+    score += 2
   }
   if (e.status === 'candidate' && e.confidence <= 4) {
     reasons.push('low-confidence candidate')

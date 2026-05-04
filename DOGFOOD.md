@@ -1,5 +1,27 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-04 — Real Store Review Rule Dogfood ✅ PASS
+
+**背景：**
+- 真实 store `doctor` 通过，仅 embedding 未加载为 warning。
+- `review --batch` 原先返回 0，但真实 store 里仍有 3 条 active 的低上下文工程碎片。
+
+**新增能力：**
+- `review` 新增 `low-context engineering fragment` 规则。
+- 命中条件较保守：active/candidate、general domain、无 tags、confidence <= 5、短语句，并包含 `benchmark`/`persistence`/`mutate`/`iterations`/`counts`/`NaN` 等调试术语。
+- 避免误伤已结构化的环境记忆，例如带 `environment/runtime` domain 和 `port` tag 的端口配置。
+
+**验证：**
+- TDD：`tests/curate.test.ts` 新增 fragment review 测试。
+- `npx vitest run tests/curate.test.ts --pool=forks --poolOptions.forks.singleFork=true`：8/8 通过。
+- `npm run build`：通过。
+- 真实 store dry-run：`flyupmem review --batch` 从 0 变为 3，候选均为低上下文工程碎片。
+
+**安全性：**
+- 本次未执行 destructive prune；真实 store 只做 dry-run review。
+
+---
+
 ### 2026-05-04 — Engram Archive Splitting ✅ PASS
 
 **新增能力：**
