@@ -147,12 +147,7 @@ export class FlyupMemStore {
   load(): void {
     if (this._loaded) return
     fs.mkdirSync(this.basePath, { recursive: true })
-    this._engrams = this.loadYaml<Engram>(this.paths.engrams, EngramSchema)
-    this._observations = this.loadYaml<Observation>(this.paths.observations, ObservationSchema)
-    this._mentalModels = this.loadYaml<MentalModel>(this.paths.mentalModels, MentalModelSchema)
-    this._episodes = this.loadYaml<Episode>(this.paths.episodes, EpisodeSchema)
-    this._graph = this.loadYamlOne<GraphData>(this.paths.graph, GraphDataSchema) ?? { entities: {}, edges: [] }
-    this._feedback = this.loadYaml<FeedbackEntry>(this.paths.feedback, FeedbackEntrySchema)
+    this.reloadFromDisk()
     this._loaded = true
     this.refreshSnapshots()
 
@@ -196,6 +191,31 @@ export class FlyupMemStore {
       return result.success ? (result.data as T) : null
     } catch {
       return null
+    }
+  }
+
+  private reloadFromDisk(): void {
+    this._engrams = this.loadYaml<Engram>(this.paths.engrams, EngramSchema)
+    this._observations = this.loadYaml<Observation>(this.paths.observations, ObservationSchema)
+    this._mentalModels = this.loadYaml<MentalModel>(this.paths.mentalModels, MentalModelSchema)
+    this._episodes = this.loadYaml<Episode>(this.paths.episodes, EpisodeSchema)
+    this._graph = this.loadYamlOne<GraphData>(this.paths.graph, GraphDataSchema) ?? { entities: {}, edges: [] }
+    this._feedback = this.loadYaml<FeedbackEntry>(this.paths.feedback, FeedbackEntrySchema)
+  }
+
+  withWriteLock<T>(fn: () => T): T {
+    fs.mkdirSync(this.basePath, { recursive: true })
+    const release = acquireLockSync(this.paths.lock)
+    try {
+      this.reloadFromDisk()
+      this._loaded = true
+      this.refreshSnapshots()
+      const result = fn()
+      this.writeAll()
+      this.refreshSnapshots()
+      return result
+    } finally {
+      release()
     }
   }
 

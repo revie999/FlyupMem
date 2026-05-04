@@ -4,6 +4,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { FlyupMemStore } from '../src/core/store.js'
+import { flyupLearn } from '../src/tools/flyup_learn.js'
 import type { Engram } from '../src/core/types.js'
 import { generateId } from '../src/core/id.js'
 import { contentHash } from '../src/core/hash.js'
@@ -94,6 +95,21 @@ describe('FlyupMemStore', () => {
     const fresh = new FlyupMemStore({ store_path: dir })
     fresh.load()
     expect(fresh.engrams.map(e => e.id)).toEqual(expect.arrayContaining(['ENG-20260504-101', 'ENG-20260504-102']))
+  })
+
+  it('learn assigns unique IDs when stale store instances write sequentially', () => {
+    const storeA = new FlyupMemStore({ store_path: dir })
+    const storeB = new FlyupMemStore({ store_path: dir })
+    storeA.load()
+    storeB.load()
+
+    const a = flyupLearn('记住：A marker 是 lock-id-a', '好的', storeA, 'test')
+    const b = flyupLearn('记住：B marker 是 lock-id-b', '好的', storeB, 'test')
+
+    expect(new Set([...a.engramIds, ...b.engramIds]).size).toBe(a.engramIds.length + b.engramIds.length)
+    const fresh = new FlyupMemStore({ store_path: dir })
+    fresh.load()
+    expect(fresh.engrams).toHaveLength(a.stored + b.stored)
   })
 
   it('records checkpoints and produces recovery context', () => {

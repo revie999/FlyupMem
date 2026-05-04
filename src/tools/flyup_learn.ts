@@ -21,39 +21,34 @@ export function flyupLearn(
   store: FlyupMemStore,
   origin: string = 'hermes:telegram',
 ): LearnResult {
-  store.load()
+  return store.withWriteLock(() => {
+    const existingIds = store.engrams.map(e => e.id)
+    const candidates = extractEngramsFromTurn(userMsg, assistantMsg, existingIds, origin)
 
-  const existingIds = store.engrams.map(e => e.id)
-  const candidates = extractEngramsFromTurn(userMsg, assistantMsg, existingIds, origin)
+    let stored = 0
+    let skipped = 0
+    const engramIds: string[] = []
 
-  let stored = 0
-  let skipped = 0
-  const engramIds: string[] = []
+    for (const candidate of candidates) {
+      // Set content_hash
+      const engram = { ...candidate, content_hash: contentHash(candidate.statement) }
 
-  for (const candidate of candidates) {
-    // Set content_hash
-    const engram = { ...candidate, content_hash: contentHash(candidate.statement) }
+      const result = applyDedup(engram as any, store)
 
-    const result = applyDedup(engram as any, store)
-
-    if (result.action === 'ADD') {
-      stored++
-      engramIds.push(engram.id)
-    } else {
-      skipped++
-      if (result.existingId) engramIds.push(result.existingId)
+      if (result.action === 'ADD') {
+        stored++
+        engramIds.push(engram.id)
+      } else {
+        skipped++
+        if (result.existingId) engramIds.push(result.existingId)
+      }
     }
-  }
 
-  // Save if anything changed
-  if (stored > 0 || skipped > 0) {
-    store.save()
-  }
-
-  return {
-    extracted: candidates.length,
-    stored,
-    skipped,
-    engramIds,
-  }
+    return {
+      extracted: candidates.length,
+      stored,
+      skipped,
+      engramIds,
+    }
+  })
 }
