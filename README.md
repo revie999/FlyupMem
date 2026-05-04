@@ -49,7 +49,7 @@ flyupmem embed-init
 flyupmem benchmark --counts 1000,5000,10000 --format markdown --out /tmp/flyupmem-benchmark.md
 ```
 
-`recall` is BM25-only by default. It does not download or initialize the embedding model unless `embedding_enabled` is true.
+`recall` is BM25-only by default. It does not download or initialize the embedding model unless `embedding_enabled` is true. Recall activation updates are write-light by default: `recall_activation_persistence=sqlite` updates the SQLite cache without rewriting large YAML files on every read. Use `flyupmem config set recall_activation_persistence yaml` if you need fully durable ACT-R counters after every recall.
 
 ## MCP Server
 

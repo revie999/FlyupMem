@@ -648,3 +648,39 @@ cp /Users/gm99/.hermes/config.yaml.bak.flyupmem-20260501-221432 ~/.hermes/config
 | 10000 | 25394.56ms | 1258.4ms | 2594.28ms | 1301.9ms | 46.89/53.1ms | 113.99/131.73ms | 2660.31/2697.31ms | 25 | 19.31 MB | 31.04 MB |
 
 **结论：** SQLite FTS 自身扩展性很好；5K/10K full recall 主要被 YAML save/load 与 recall 后 activation 持久化拖慢。下一步更适合做归档/分片或 write-light recall。
+---
+
+### 2026-05-04 — Write-light Recall ✅ PASS
+
+**新增能力：**
+- 默认 `recall_activation_persistence=sqlite`：recall 只更新 SQLite `memory_meta.activation/last_accessed`，不再每次 recall 后重写 YAML。
+- 可配置：`sqlite`（默认轻写）、`yaml`（完全持久化，旧行为）、`off`（不写 recall activation）。
+- `FlyupMemStore` 构造器现在会加载 `config.yaml`，让 `flyupmem config set ...` 对新 store 实际生效。
+- `withWriteLock()` 会打开 SQLite，避免未显式 `store.load()` 时 cache sync 失效。
+
+**验证：**
+- `npm run build`：通过。
+- `tests/config.test.ts + tests/recall.test.ts`：21 tests passed。
+- `npm test`：23 files / 184 TS tests passed + 8 Hermes plugin boundary tests passed。
+- `npm run test:benchmark`：3 tests passed。
+- `npm run test:sync`：5 tests passed。
+- write-light 行为测试：YAML 内容不变，但 SQLite activation meta 更新。
+- durable 行为测试：`recall_activation_persistence=yaml` 时 YAML 会更新。
+- dist CLI benchmark：
+  - `node dist/index.js benchmark --counts 1000,5000,10000 --iterations 3 --store <tmp> --format markdown --out /tmp/flyupmem-write-light-final.md`。
+
+**本机 1K/5K/10K 结果（默认 write-light recall）：**
+
+| count | populate | save | load | rebuild | FTS p50/p95 | BM25 p50/p95 | recall p50/p95 | hits | sqlite | yaml |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 1000 | 738.29ms | 207.59ms | 286.72ms | 100.62ms | 3.52/5.09ms | 17.69/32.07ms | 12.72/23.24ms | 25 | 1.34 MB | 4.99 MB |
+| 5000 | 7145.86ms | 626.63ms | 1238.87ms | 559.43ms | 19.41/30.3ms | 53.78/55.26ms | 42.44/59.12ms | 25 | 12.89 MB | 15.64 MB |
+| 10000 | 27910.18ms | 1773.67ms | 3129.78ms | 1096.6ms | 38.22/39.68ms | 95.27/96.22ms | 49.12/88.25ms | 25 | 19.31 MB | 31.04 MB |
+
+**对比前一版：**
+- 1K recall p95：约 347ms → 23ms。
+- 5K recall p95：约 1.41s → 59ms。
+- 10K recall p95：约 2.70s → 88ms。
+
+**结论：** write-light recall 已经解决主要在线读取延迟瓶颈；下一步归档/分片仍有价值，但优先级应转向控制 learn/save/load 和长期 YAML 体积，而不是 recall 搜索路径。
+

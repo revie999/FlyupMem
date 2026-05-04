@@ -1350,17 +1350,17 @@ Return a concise, actionable mental model statement.`
 | 操作 | 延迟 | 成本 |
 |------|------|------|
 | learn（写入） | <50ms | 零 |
-| recall（5 信号融合 + rerank） | <300ms（1K 记忆） | 零 |
+| recall（5 信号融合 + rerank） | ~12.7ms p50 / 23.2ms p95（1K，默认 SQLite 轻写）；~49.1ms p50 / 88.3ms p95（10K，默认 SQLite 轻写） | 零 |
 | batchDecay（100 条） | <100ms | 零 |
 | consolidate（50 条聚类） | <500ms | 零 |
 | 嵌入计算（单条） | <50ms（BGE-small） | 零 |
 | Reflect（需 LLM） | 2-5s | ~$0.01 |
 
-1K 记忆时，整个 prefetch→inject 链路 < 300ms。
+1K 记忆时，默认 write-light recall 链路 p95 < 25ms；10K 记忆时 p95 约 88ms。
 
-**测量条件：** Apple M4 Studio, 64GB RAM, Node.js 20 LTS, BGE-small-zh ONNX (CPU)。
-recall 含 BM25 + 语义 + 图谱 + 时序 + activation 加权 + 8 维 rerank 全链路。
-不含网络延迟（纯本地）。10K 记忆时 recall 预计 ~800ms，需启用 SQLite 索引优化。
+**测量条件：** macOS darwin/x64, Node.js 24.14.0, embedding disabled（零成本 BM25/FTS 路径）。
+recall 含 BM25 + 图谱 + 时序 + activation 加权 + 9 维 rerank；默认 `recall_activation_persistence=sqlite`，只更新 SQLite activation meta，不在每次 recall 后重写 YAML。
+不含网络延迟（纯本地）。如切回 `recall_activation_persistence=yaml`，10K recall 会被 YAML save/load 拖慢到秒级。
 
 ---
 
@@ -1412,6 +1412,7 @@ recall 含 BM25 + 语义 + 图谱 + 时序 + activation 加权 + 8 维 rerank �
 - [ ] 配置面板
 - [x] memory review/prune CLI — 本地记忆质量维护，dry-run 默认，安全退休 dogfood/test marker
 - [x] 性能监控 + 指标 — MVP: `flyupmem benchmark` measures 1K/5K/10K population, YAML save/load, SQLite rebuild, FTS, BM25 fallback, and full recall pipeline
+- [x] write-light recall — 默认 `recall_activation_persistence=sqlite`，recall 只更新 SQLite activation meta，避免每次读取重写大 YAML；可切回 `yaml` 完全持久化
 
 ---
 

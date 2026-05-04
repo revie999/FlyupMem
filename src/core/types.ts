@@ -237,6 +237,7 @@ export interface FlyupMemConfig {
   consolidation_enabled: boolean // default true
   embedding_enabled: boolean   // default false (Phase 2)
   sqlite_enabled: boolean      // default true — FTS5 cache acceleration
+  recall_activation_persistence: 'sqlite' | 'yaml' | 'off' // default sqlite — avoid YAML rewrite on recall
   log_level: 'debug' | 'info' | 'warn' | 'error'
 }
 
@@ -248,5 +249,6 @@ export const DEFAULT_CONFIG: FlyupMemConfig = {
   consolidation_enabled: true,
   embedding_enabled: false,
   sqlite_enabled: true,
+  recall_activation_persistence: 'sqlite',
   log_level: 'info',
 }

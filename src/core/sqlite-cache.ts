@@ -102,6 +102,7 @@ export class SQLiteCache {
     ftsDelete: Database.Statement
     ftsUpdate: Database.Statement
     metaUpsert: Database.Statement
+    metaUpdateActivation: Database.Statement
     metaGet: Database.Statement
     metaDelete: Database.Statement
     metaAll: Database.Statement
@@ -170,6 +171,11 @@ export class SQLiteCache {
           confidence=excluded.confidence, activation=excluded.activation,
           last_accessed=excluded.last_accessed, content_hash=excluded.content_hash,
           updated_at=excluded.updated_at
+      `),
+      metaUpdateActivation: db.prepare(`
+        UPDATE memory_meta
+        SET activation = ?, last_accessed = ?, updated_at = ?
+        WHERE id = ?
       `),
       metaGet: db.prepare(`SELECT * FROM memory_meta WHERE id = ?`),
       metaDelete: db.prepare(`DELETE FROM memory_meta WHERE id = ?`),
@@ -255,6 +261,11 @@ export class SQLiteCache {
       row.confidence, row.activation, row.last_accessed, row.content_hash,
       row.created_at, row.updated_at,
     )
+  }
+
+  updateActivation(id: string, activation: number, lastAccessed: string): void {
+    if (!this.isAvailable) return
+    this.stmts.metaUpdateActivation.run(activation, lastAccessed, new Date().toISOString(), id)
   }
 
   metaGet(id: string): MetaRow | undefined {

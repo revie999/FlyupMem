@@ -23,6 +23,7 @@ const CONFIG_KEYS: Record<string, { type: 'string' | 'number' | 'boolean'; descr
   'consolidation_enabled': { type: 'boolean', description: 'Enable auto-consolidation (engram → observation)' },
   'embedding_enabled': { type: 'boolean', description: 'Enable BGE-small-zh embedding for semantic search' },
   'sqlite_enabled': { type: 'boolean', description: 'Enable SQLite FTS5 cache for accelerated BM25 search' },
+  'recall_activation_persistence': { type: 'string', description: 'Recall activation write mode: sqlite avoids YAML rewrites, yaml is fully durable, off disables recall writes', values: ['sqlite', 'yaml', 'off'] },
   'log_level': { type: 'string', description: 'Log level', values: ['debug', 'info', 'warn', 'error'] },
 }
 

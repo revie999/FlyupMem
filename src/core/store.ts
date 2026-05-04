@@ -20,6 +20,21 @@ function expandHome(p: string): string {
   return p.replace(/^~/, os.homedir())
 }
 
+function loadStoredConfig(basePath: string): Partial<FlyupMemConfig> {
+  const configPath = path.join(basePath, 'config.yaml')
+  if (!fs.existsSync(configPath)) return {}
+  try {
+    const raw = yaml.load(fs.readFileSync(configPath, 'utf-8'))
+    return (typeof raw === 'object' && raw !== null ? raw : {}) as Partial<FlyupMemConfig>
+  } catch {
+    return {}
+  }
+}
+
+function activationValue(a: { retrieval_strength: number; storage_strength: number }): number {
+  return (a.retrieval_strength + a.storage_strength) / 2
+}
+
 /**
  * Atomic write: write to tmp file, then rename.
  */
@@ -116,8 +131,15 @@ export class FlyupMemStore {
 
   constructor(config?: Partial<FlyupMemConfig>) {
     const envStorePath = process.env.FLYUPMEM_STORE_PATH
+    const preliminaryConfig = {
+      ...DEFAULT_CONFIG,
+      ...(envStorePath ? { store_path: envStorePath } : {}),
+      ...config,
+    }
+    const storedConfig = loadStoredConfig(expandHome(preliminaryConfig.store_path))
     this.config = {
       ...DEFAULT_CONFIG,
+      ...storedConfig,
       ...(envStorePath ? { store_path: envStorePath } : {}),
       ...config,
     }
@@ -209,6 +231,7 @@ export class FlyupMemStore {
     try {
       this.reloadFromDisk()
       this._loaded = true
+      try { this.cache.open() } catch {}
       this.refreshSnapshots()
       const result = fn()
       this.writeAll()
@@ -304,6 +327,17 @@ export class FlyupMemStore {
       this._engrams[idx] = { ...this._engrams[idx], ...updates }
       this.cache.syncEngram(this._engrams[idx])
     }
+  }
+
+  updateActivationCacheOnly(mem: Memory): void {
+    if (!mem.activation) return
+    if (!this.cache.metaGet(mem.id)) {
+      if ('consolidated' in mem) this.cache.syncEngram(mem)
+      else if (mem.layer === 'observation') this.cache.syncObservation(mem)
+      else if (mem.layer === 'mental_model') this.cache.syncMentalModel(mem)
+      return
+    }
+    this.cache.updateActivation(mem.id, activationValue(mem.activation), mem.activation.last_accessed)
   }
 
   removeEngram(id: string): void {

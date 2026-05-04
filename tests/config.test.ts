@@ -48,6 +48,16 @@ describe('flyupConfig', () => {
     const freshStore = new FlyupMemStore({ store_path: tmp })
     const result = configShow(freshStore)
     expect(result.config.decay_enabled).toBe(false)
+    expect(freshStore.config.decay_enabled).toBe(false)
+  })
+
+  it('supports recall activation persistence mode config', () => {
+    const result = configSet(store, 'recall_activation_persistence', 'yaml')
+    expect(result.changed).toBe(true)
+    expect(result.config.recall_activation_persistence).toBe('yaml')
+
+    const freshStore = new FlyupMemStore({ store_path: tmp })
+    expect(freshStore.config.recall_activation_persistence).toBe('yaml')
   })
 
   it('configSet rejects unknown keys', () => {

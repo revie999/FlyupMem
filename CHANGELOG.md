@@ -49,6 +49,12 @@
 - Added `npm run test:sync` integration test suite for real Git repository workflows.
 
 ### Changed
+- Recall activation persistence is now write-light by default:
+  - New config `recall_activation_persistence` supports `sqlite` (default), `yaml`, and `off`.
+  - Default `sqlite` mode updates only SQLite activation metadata during recall and avoids rewriting large YAML source files on every read.
+  - `yaml` mode preserves the previous fully durable behavior for users who want ACT-R counters persisted to YAML immediately.
+- `FlyupMemStore` now loads persisted `config.yaml` during construction, so `flyupmem config set ...` affects fresh runtime stores, not just `config show`.
+- `withWriteLock()` opens SQLite before write mutations so cache sync paths work outside explicit `store.load()` calls.
 - Default `npm test` now excludes long-running sync integration and benchmark suites; run them explicitly with `npm run test:sync` and `npm run test:benchmark`.
 - Benchmark smoke suite reduced from 10K max to 5K/2.5K scale where needed to avoid Vitest worker RPC timeouts on synchronous SQLite workloads.
 

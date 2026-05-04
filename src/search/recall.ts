@@ -254,18 +254,23 @@ export async function recallWithExplanation(
   const now = new Date().toISOString()
   const today = now.slice(0, 10)
   let needsSave = false
+  const persistence = store.config.recall_activation_persistence
   for (const mem of trimmed) {
     if ('activation' in mem && mem.activation) {
       mem.activation.turn_count = (mem.activation.turn_count ?? 0) + 1
       mem.activation.last_accessed = today
-      if ('consolidated' in mem) {
-        store.updateEngram(mem.id, { activation: mem.activation } as any)
-      } else if (mem.layer === 'observation') {
-        store.updateObservation(mem.id, { activation: mem.activation } as any)
-      } else if (mem.layer === 'mental_model') {
-        store.updateMentalModel(mem.id, { activation: mem.activation } as any)
+      if (persistence === 'yaml') {
+        if ('consolidated' in mem) {
+          store.updateEngram(mem.id, { activation: mem.activation } as any)
+        } else if (mem.layer === 'observation') {
+          store.updateObservation(mem.id, { activation: mem.activation } as any)
+        } else if (mem.layer === 'mental_model') {
+          store.updateMentalModel(mem.id, { activation: mem.activation } as any)
+        }
+        needsSave = true
+      } else if (persistence === 'sqlite') {
+        store.updateActivationCacheOnly(mem)
       }
-      needsSave = true
     }
   }
   if (needsSave) store.save()

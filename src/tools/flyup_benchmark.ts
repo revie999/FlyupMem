@@ -263,7 +263,7 @@ export async function flyupBenchmark(options: BenchmarkOptions = {}): Promise<Be
     notes: [
       'Embedding is disabled for this benchmark to measure zero-cost local retrieval path.',
       'SQLite is treated as a rebuildable cache; YAML remains source of truth.',
-      'Recall timings include activation persistence and YAML save side effects.',
+      'Recall timings include activation persistence according to store config; default write-light mode updates SQLite meta without rewriting YAML.',
     ],
   }
 

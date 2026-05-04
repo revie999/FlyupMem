@@ -157,4 +157,30 @@ describe('Integration: learn → recall → status', () => {
     expect(result.diagnostics.semantic_available).toBe(false)
     expect(result.injection).toContain('bm25-only-20260504')
   })
+
+  it('uses write-light recall by default: SQLite activation updates without rewriting YAML', async () => {
+    flyupLearn('记住：write-light recall marker 是 write-light-20260504。', '好的', store)
+    const mem = store.engrams.find(e => e.statement.includes('write-light-20260504'))!
+    const yamlPath = path.join(dir, 'engrams.yaml')
+    const beforeYaml = fs.readFileSync(yamlPath, 'utf8')
+
+    const result = await recallWithExplanation('write-light-20260504', store)
+
+    expect(result.injection).toContain('write-light-20260504')
+    expect(fs.readFileSync(yamlPath, 'utf8')).toBe(beforeYaml)
+    const meta = store.cache.metaGet(mem.id)
+    expect(meta?.last_accessed).toBe(new Date().toISOString().slice(0, 10))
+  })
+
+  it('can opt into YAML recall activation persistence for durable ACT-R writes', async () => {
+    const durableStore = new FlyupMemStore({ store_path: dir, recall_activation_persistence: 'yaml' })
+    flyupLearn('记住：durable recall marker 是 durable-recall-20260504。', '好的', durableStore)
+    const yamlPath = path.join(dir, 'engrams.yaml')
+    const beforeYaml = fs.readFileSync(yamlPath, 'utf8')
+
+    const result = await recallWithExplanation('durable-recall-20260504', durableStore)
+
+    expect(result.injection).toContain('durable-recall-20260504')
+    expect(fs.readFileSync(yamlPath, 'utf8')).not.toBe(beforeYaml)
+  })
 })
