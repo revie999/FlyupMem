@@ -92,7 +92,6 @@ async function main() {
         console.error('Usage: flyupmem recall "<query>"')
         process.exit(1)
       }
-      await initEmbedder()
       const explain = args.includes('--explain') || args.includes('-x')
       if (explain) {
         const result = await flyupRecallExplain(query, store)
@@ -160,7 +159,7 @@ async function main() {
 
     case 'embed-init': {
       console.log('Initializing embedding model...')
-      const ok = await initEmbedder()
+      const ok = await initEmbedder({ timeoutMs: 0, forceRetry: true })
       console.log(ok ? '✓ Embedding model ready' : '✗ Embedding model unavailable')
       break
     }

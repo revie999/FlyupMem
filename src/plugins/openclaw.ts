@@ -76,11 +76,12 @@ export class FlyupMemPlugin {
 
     this.store.load()
 
-    // Best-effort embedding init (non-blocking if fails)
-    try {
-      await initEmbedder()
-    } catch {
-      // Embedding model not available, BM25-only mode
+    // Best-effort embedding warmup. Keep startup responsive when the model
+    // needs a first-time download or the network is unavailable.
+    if (this.config.embedding_enabled) {
+      void initEmbedder({ timeoutMs: 1_500 }).catch(() => {
+        // Embedding model not available, BM25-only mode
+      })
     }
 
     // Run initial maintenance if configured

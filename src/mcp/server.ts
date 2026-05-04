@@ -12,7 +12,6 @@ import { flyupMaintain } from '../tools/flyup_maintain.js'
 import { flyupReflect } from '../tools/flyup_reflect.js'
 import { flyupPack } from '../tools/flyup_pack.js'
 import { flyupInspect } from '../tools/flyup_inspect.js'
-import { initEmbedder } from '../search/embed.js'
 
 const store = new FlyupMemStore()
 
@@ -54,7 +53,6 @@ function createServer(): McpServer {
     },
     async ({ query, token_budget, explain }) => {
       store.load()
-      await initEmbedder()
       const result = explain
         ? await flyupRecallExplain(query, store, token_budget)
         : await flyupRecall(query, store, token_budget)

@@ -6,15 +6,42 @@ let pipeline: any = null
 let embedder: any = null
 let modelReady = false
 let modelLoading = false
+let nextRetryAt = 0
 
 const MODEL_NAME = 'Xenova/bge-small-zh-v1.5'
 const DIMENSION = 512 // BGE-small-zh output dimension
+const DEFAULT_INIT_TIMEOUT_MS = 5_000
+const FAILED_RETRY_COOLDOWN_MS = 60_000
+
+export interface InitEmbedderOptions {
+  timeoutMs?: number
+  forceRetry?: boolean
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  if (timeoutMs <= 0) return promise
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`embedding init timed out after ${timeoutMs}ms`)), timeoutMs)
+    promise.then(
+      value => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      err => {
+        clearTimeout(timer)
+        reject(err)
+      },
+    )
+  })
+}
 
 /**
  * Lazy-load the embedding model. Returns true if model is available.
  */
-export async function initEmbedder(): Promise<boolean> {
+export async function initEmbedder(options: InitEmbedderOptions = {}): Promise<boolean> {
   if (modelReady) return true
+  const now = Date.now()
+  if (!options.forceRetry && nextRetryAt > now) return false
   if (modelLoading) {
     // Wait for existing load
     while (modelLoading) {
@@ -25,15 +52,23 @@ export async function initEmbedder(): Promise<boolean> {
 
   modelLoading = true
   try {
-    const { pipeline: pl } = await import('@xenova/transformers')
-    pipeline = pl
-    embedder = await pipeline('feature-extraction', MODEL_NAME, {
-      quantized: true,
-    })
+    const loaded = await withTimeout((async () => {
+      const { pipeline: pl } = await import('@xenova/transformers')
+      const loadedEmbedder = await pl('feature-extraction', MODEL_NAME, {
+        quantized: true,
+      })
+      return { pipeline: pl, embedder: loadedEmbedder }
+    })(),
+      options.timeoutMs ?? DEFAULT_INIT_TIMEOUT_MS,
+    )
+    pipeline = loaded.pipeline
+    embedder = loaded.embedder
     modelReady = true
+    nextRetryAt = 0
   } catch (err) {
     console.warn('[FlyupMem] Embedding model unavailable, falling back to BM25-only:', (err as Error).message)
     modelReady = false
+    nextRetryAt = Date.now() + FAILED_RETRY_COOLDOWN_MS
   } finally {
     modelLoading = false
   }

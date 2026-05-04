@@ -9,7 +9,7 @@ import { temporalSearch } from './temporal.js'
 import { rrfMerge } from './rrf.js'
 import { localRerank } from './rerank.js'
 import { computeActivation } from '../lifecycle/decay.js'
-import { isEmbeddingAvailable } from './embed.js'
+import { initEmbedder, isEmbeddingAvailable } from './embed.js'
 
 export interface SignalExplanation {
   matched: boolean
@@ -183,7 +183,10 @@ export async function recallWithExplanation(
 ): Promise<RecallWithExplanationResult> {
   const allMemories = store.allMemories()
   const documents = allMemories.map(m => ({ id: m.id, text: m.statement }))
-  const semanticAvailable = isEmbeddingAvailable()
+  const semanticEnabled = store.config.embedding_enabled
+  const semanticAvailable = semanticEnabled
+    ? (isEmbeddingAvailable() || await initEmbedder({ timeoutMs: 1_500 }))
+    : false
 
   // ─── Signal 1: BM25 (always available, FTS5 accelerated) ───
   const bm25Results = bm25Search(query, documents, 30, store.cache)

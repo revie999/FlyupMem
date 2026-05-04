@@ -81,7 +81,7 @@ describe('Integration: learn → recall → status', () => {
   })
 
   it('does not inject unrelated memories when semantic search is available', async () => {
-    const ready = await initEmbedder()
+    const ready = await initEmbedder({ timeoutMs: 1000 })
     if (!ready || !isEmbeddingAvailable()) return
 
     flyupLearn('记住：主人偏好直接给结论。', '好的', store)
@@ -148,4 +148,13 @@ describe('Integration: learn → recall → status', () => {
     expect(parsed.explanations[0].signals.bm25.matched).toBe(true)
     expect(parsed.explanations[0].scores.rerank).toEqual(expect.any(Number))
   }, 30000)
+
+  it('default recall does not require semantic embedding initialization', async () => {
+    flyupLearn('记住：默认 recall marker 是 bm25-only-20260504。', '好的', store)
+
+    const result = await recallWithExplanation('bm25-only-20260504', store)
+
+    expect(result.diagnostics.semantic_available).toBe(false)
+    expect(result.injection).toContain('bm25-only-20260504')
+  })
 })

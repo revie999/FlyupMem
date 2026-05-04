@@ -32,6 +32,13 @@ describe('FlyupMemPlugin', () => {
     expect(store.engrams).toEqual([])
   })
 
+  it('keeps startup BM25-only by default', async () => {
+    const start = Date.now()
+    await plugin.onStartup()
+    expect(Date.now() - start).toBeLessThan(1000)
+    expect(plugin.getStore().config.embedding_enabled).toBe(false)
+  })
+
   it('learns from conversation via onAfterTurn', async () => {
     await plugin.onStartup()
     await plugin.onAfterTurn(
