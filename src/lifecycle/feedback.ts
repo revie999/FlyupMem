@@ -30,6 +30,9 @@ export function applyFeedback(
   }
   store.addFeedback(fb)
 
+  // Also sync to SQLite cache
+  store.cache.feedbackInsert(memoryId, signal, context ?? null)
+
   // Update feedback counts on the memory
   if ('feedback' in mem && mem.feedback) {
     if (signal === 'positive') mem.feedback.positive++
@@ -71,6 +74,10 @@ export function applyFeedback(
   // Update the memory in store
   if (mem.layer === 'raw') {
     store.updateEngram(memoryId, mem as any)
+  } else if (mem.layer === 'observation') {
+    store.updateObservation(memoryId, mem as any)
+  } else if (mem.layer === 'mental_model') {
+    store.updateMentalModel(memoryId, mem as any)
   }
 
   store.save()

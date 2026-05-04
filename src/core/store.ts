@@ -313,10 +313,38 @@ export class FlyupMemStore {
 
   addObservation(obs: Observation): void {
     this._observations.push(obs)
+    this.cache.syncObservation(obs)
+  }
+
+  updateObservation(id: string, updates: Partial<Observation>): void {
+    const idx = this._observations.findIndex(o => o.id === id)
+    if (idx >= 0) {
+      this._observations[idx] = { ...this._observations[idx], ...updates }
+      this.cache.syncObservation(this._observations[idx])
+    }
+  }
+
+  removeObservation(id: string): void {
+    this._observations = this._observations.filter(o => o.id !== id)
+    this.cache.removeItem(id)
   }
 
   addMentalModel(mm: MentalModel): void {
     this._mentalModels.push(mm)
+    this.cache.syncMentalModel(mm)
+  }
+
+  updateMentalModel(id: string, updates: Partial<MentalModel>): void {
+    const idx = this._mentalModels.findIndex(m => m.id === id)
+    if (idx >= 0) {
+      this._mentalModels[idx] = { ...this._mentalModels[idx], ...updates }
+      this.cache.syncMentalModel(this._mentalModels[idx])
+    }
+  }
+
+  removeMentalModel(id: string): void {
+    this._mentalModels = this._mentalModels.filter(m => m.id !== id)
+    this.cache.removeItem(id)
   }
 
   addEpisode(ep: Episode): void {

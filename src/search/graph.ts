@@ -31,7 +31,7 @@ function getEntityNeighbors(
 }
 
 /**
- * Get links from a memory (by type).
+ * Get links from a memory (by type), following edges in both directions.
  */
 function getLinks(
   memoryId: string,
@@ -39,8 +39,11 @@ function getLinks(
   graph: GraphData,
 ): Array<{ toId: string; weight: number }> {
   return graph.edges
-    .filter(e => e.from === memoryId && e.type === linkType)
-    .map(e => ({ toId: e.to, weight: e.weight }))
+    .filter(e => e.type === linkType && (e.from === memoryId || e.to === memoryId))
+    .map(e => ({
+      toId: e.from === memoryId ? e.to : e.from,
+      weight: e.weight,
+    }))
 }
 
 /**

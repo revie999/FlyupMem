@@ -258,9 +258,12 @@ export async function recallWithExplanation(
     if ('activation' in mem && mem.activation) {
       mem.activation.turn_count = (mem.activation.turn_count ?? 0) + 1
       mem.activation.last_accessed = today
-      // Update in store (engrams have updateEngram; obs/mm are direct refs)
       if ('consolidated' in mem) {
         store.updateEngram(mem.id, { activation: mem.activation } as any)
+      } else if (mem.layer === 'observation') {
+        store.updateObservation(mem.id, { activation: mem.activation } as any)
+      } else if (mem.layer === 'mental_model') {
+        store.updateMentalModel(mem.id, { activation: mem.activation } as any)
       }
       needsSave = true
     }

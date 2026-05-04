@@ -78,6 +78,25 @@ describe('graphExpansion', () => {
     expect(results[0].score).toBeCloseTo(0.8)
   })
 
+  it('follows semantic links in reverse direction', () => {
+    const memories = [
+      makeMemory('A'),
+      makeMemory('B'),
+    ]
+
+    const graph: GraphData = {
+      entities: {},
+      edges: [
+        { from: 'A', to: 'B', type: 'semantic', weight: 0.8 },
+      ],
+    }
+
+    // Expanding from B should find A via the reverse of A→B
+    const results = graphExpansion(['B'], memories, graph)
+    expect(results[0].id).toBe('A')
+    expect(results[0].score).toBeCloseTo(0.8)
+  })
+
   it('boosts causal links', () => {
     const memories = [
       makeMemory('A'),

@@ -542,6 +542,24 @@ export class SQLiteCache {
     this.metaUpsert(rows.meta)
   }
 
+  /** Sync a single observation after mutation. */
+  syncObservation(o: Observation): void {
+    if (!this.isAvailable) return
+    const rows = this.observationToRows(o)
+    this.ftsDelete(o.id)
+    this.ftsInsert(rows.fts.id, rows.fts.statement, rows.fts.summary, rows.fts.tags, rows.fts.scope, rows.fts.domain)
+    this.metaUpsert(rows.meta)
+  }
+
+  /** Sync a single mental model after mutation. */
+  syncMentalModel(m: MentalModel): void {
+    if (!this.isAvailable) return
+    const rows = this.mentalModelToRows(m)
+    this.ftsDelete(m.id)
+    this.ftsInsert(rows.fts.id, rows.fts.statement, rows.fts.summary, rows.fts.tags, rows.fts.scope, rows.fts.domain)
+    this.metaUpsert(rows.meta)
+  }
+
   /** Remove a single item from cache. */
   removeItem(id: string): void {
     if (!this.isAvailable) return

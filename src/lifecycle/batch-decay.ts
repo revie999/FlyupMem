@@ -44,6 +44,7 @@ export function batchDecay(store: FlyupMemStore): {
       statusChanges.push({ id: eng.id, from: oldStatus, to: newStatus })
     }
 
+    store.cache.syncEngram(eng)
     processed++
   }
 
@@ -73,6 +74,7 @@ export function batchDecay(store: FlyupMemStore): {
       statusChanges.push({ id: obs.id, from: oldStatus, to: newStatus })
     }
 
+    store.cache.syncObservation(obs)
     processed++
   }
 
@@ -102,6 +104,7 @@ export function batchDecay(store: FlyupMemStore): {
       statusChanges.push({ id: mm.id, from: oldStatus, to: newStatus })
     }
 
+    store.cache.syncMentalModel(mm)
     processed++
   }
 
