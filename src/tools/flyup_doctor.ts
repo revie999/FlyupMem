@@ -362,7 +362,17 @@ function runRepairs(store: FlyupMemStore, options: DoctorOptions): DoctorRepair[
     })
     return repairs
   }
-  repairs.push(repairSchemaMigrations(store))
+  const schemaRepair = repairSchemaMigrations(store)
+  repairs.push(schemaRepair)
+  if (schemaRepair.status === 'failed') {
+    repairs.push({
+      name: 'load-dependent-repairs',
+      status: 'skipped',
+      message: 'Skipped SQLite/graph/chunk repairs because schema migration failed',
+      details: schemaRepair.details?.slice(0, 10),
+    })
+    return repairs
+  }
 
   const freshStore = new FlyupMemStore(store.config)
   repairs.push(repairSQLiteCache(freshStore))

@@ -101,34 +101,58 @@ function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
+const heldLocks = new Map<string, number>()
+
+function releaseHeldLock(lockPath: string): void {
+  const count = heldLocks.get(lockPath)
+  if (count === undefined) return
+  if (count > 1) {
+    heldLocks.set(lockPath, count - 1)
+    return
+  }
+  heldLocks.delete(lockPath)
+  try { fs.unlinkSync(lockPath) } catch {}
+}
+
 export function acquireLockSync(lockPath: string, timeoutMs = 5_000): () => void {
-  fs.mkdirSync(path.dirname(lockPath), { recursive: true })
+  const normalizedLockPath = path.resolve(lockPath)
+  const heldCount = heldLocks.get(normalizedLockPath)
+  if (heldCount !== undefined) {
+    heldLocks.set(normalizedLockPath, heldCount + 1)
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      releaseHeldLock(normalizedLockPath)
+    }
+  }
+
+  fs.mkdirSync(path.dirname(normalizedLockPath), { recursive: true })
   const start = Date.now()
   while (true) {
     try {
-      const fd = fs.openSync(lockPath, 'wx')
+      const fd = fs.openSync(normalizedLockPath, 'wx')
       fs.writeFileSync(fd, JSON.stringify({ pid: process.pid, created_at: new Date().toISOString() }))
       fs.closeSync(fd)
+      heldLocks.set(normalizedLockPath, 1)
+      let released = false
       return () => {
-        try { fs.unlinkSync(lockPath) } catch {}
+        if (released) return
+        released = true
+        releaseHeldLock(normalizedLockPath)
       }
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code
       if (code !== 'EEXIST') throw err
       try {
-        const raw = fs.readFileSync(lockPath, 'utf-8')
-        const lock = JSON.parse(raw) as { pid?: number }
-        if (lock.pid === process.pid) return () => {}
-      } catch {}
-      try {
-        const ageMs = Date.now() - fs.statSync(lockPath).mtimeMs
+        const ageMs = Date.now() - fs.statSync(normalizedLockPath).mtimeMs
         if (ageMs > timeoutMs * 3) {
-          fs.unlinkSync(lockPath)
+          fs.unlinkSync(normalizedLockPath)
           continue
         }
       } catch {}
       if (Date.now() - start > timeoutMs) {
-        throw new Error(`Timed out waiting for FlyupMem store lock: ${lockPath}`)
+        throw new Error(`Timed out waiting for FlyupMem store lock: ${normalizedLockPath}`)
       }
       sleepSync(50)
     }

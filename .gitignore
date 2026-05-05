@@ -4,3 +4,4 @@ dist/
 .flyupmem/
 __pycache__/
 *.pyc
+.DS_Store

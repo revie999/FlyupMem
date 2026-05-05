@@ -4,6 +4,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import * as yaml from 'js-yaml'
+import { execFileSync } from 'node:child_process'
 import { FlyupMemStore } from '../src/core/store.js'
 import { flyupDoctor } from '../src/tools/flyup_doctor.js'
 import type { Engram } from '../src/core/types.js'
@@ -12,6 +13,15 @@ import { contentHash } from '../src/core/hash.js'
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'flyupmem-doctor-'))
+}
+
+function runDoctorCli(dir: string, args: string[]): string {
+  const tsx = path.resolve(__dirname, '..', 'node_modules', '.bin', 'tsx')
+  return execFileSync(tsx, ['src/index.ts', 'doctor', ...args], {
+    cwd: path.resolve(__dirname, '..'),
+    env: { ...process.env, FLYUPMEM_STORE_PATH: dir },
+    encoding: 'utf-8',
+  })
 }
 
 function makeEngram(overrides: Partial<Engram> = {}): Engram {
@@ -79,6 +89,18 @@ describe('flyupDoctor', () => {
     expect(names).toContain('file-size')
     expect(names).toContain('hermes-plugin')
   })
+
+  it('CLI doctor --json prints machine-readable diagnostics', () => {
+    store.load()
+    store.save()
+
+    const stdout = runDoctorCli(tmp, ['--json'])
+    const parsed = JSON.parse(stdout)
+
+    expect(['healthy', 'warning']).toContain(parsed.overall)
+    expect(parsed.checks.some((check: { name?: string }) => check.name === 'schema-version')).toBe(true)
+    expect(stdout).not.toContain('Running doctor checks')
+  }, 30000)
 
   it('detects duplicate IDs', async () => {
     const e1 = makeEngram({ id: 'DUP-001' })

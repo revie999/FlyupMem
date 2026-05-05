@@ -171,8 +171,14 @@ async function main() {
     }
     case 'doctor': {
       const repair = args.includes('--repair')
-      console.log(repair ? 'Running doctor checks and safe repairs...\n' : 'Running doctor checks...\n')
+      const json = args.includes('--json')
       const result = await flyupDoctor(store, { repair })
+      if (json) {
+        console.log(JSON.stringify(result, null, 2))
+        if (result.overall === 'error') process.exit(1)
+        break
+      }
+      console.log(repair ? 'Running doctor checks and safe repairs...\n' : 'Running doctor checks...\n')
       if (result.repairs?.length) {
         console.log('Repairs:')
         for (const repairResult of result.repairs) {
@@ -439,7 +445,7 @@ Usage:
   flyupmem export [file.yaml]                # Export Knowledge Pack
   flyupmem import <file.yaml>                # Import Knowledge Pack
   flyupmem embed-init                        # Pre-load embedding model
-  flyupmem doctor [--repair]                 # Deep health check; --repair runs safe repairs
+  flyupmem doctor [--repair] [--json]        # Deep health check; --repair runs safe repairs
   flyupmem setup [--force]                   # Environment check + store init
   flyupmem migrate [--dry-run|--apply]       # Upgrade YAML store schema metadata and old fields
   flyupmem inspect <memory-id> [--json]      # Inspect memory detail & activation

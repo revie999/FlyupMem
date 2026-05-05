@@ -186,7 +186,12 @@ describe('flyupMigrate', () => {
       migrations_applied: [],
     }
     fs.writeFileSync(path.join(tmp, 'schema.yaml'), yaml.dump(futureSchema), 'utf8')
+    fs.writeFileSync(path.join(tmp, 'engrams.yaml'), yaml.dump(
+      Array.from({ length: 5 }, (_, i) => oldEngram(`MIGRATE-FUTURE-${i + 1}`)),
+      { lineWidth: 120, noRefs: true },
+    ), 'utf8')
     const before = fs.readFileSync(path.join(tmp, 'schema.yaml'), 'utf8')
+    const engramsBefore = fs.readFileSync(path.join(tmp, 'engrams.yaml'), 'utf8')
 
     const migrate = flyupMigrate(new FlyupMemStore({ store_path: tmp }), { dryRun: false })
     expect(migrate.ok).toBe(false)
@@ -194,10 +199,13 @@ describe('flyupMigrate', () => {
     expect(migrate.backupPath).toBeUndefined()
     expect(fs.readFileSync(path.join(tmp, 'schema.yaml'), 'utf8')).toBe(before)
 
-    const repaired = await flyupDoctor(new FlyupMemStore({ store_path: tmp }), { repair: true })
+    const repaired = await flyupDoctor(new FlyupMemStore({ store_path: tmp, max_engrams_per_file: 2 }), { repair: true })
     const repair = repaired.repairs!.find(r => r.name === 'schema-migrations')!
     expect(repair.status).toBe('failed')
+    expect(repaired.repairs!.find(r => r.name === 'load-dependent-repairs')!.status).toBe('skipped')
     expect(fs.readFileSync(path.join(tmp, 'schema.yaml'), 'utf8')).toBe(before)
+    expect(fs.readFileSync(path.join(tmp, 'engrams.yaml'), 'utf8')).toBe(engramsBefore)
+    expect(fs.existsSync(path.join(tmp, 'engrams.d'))).toBe(false)
   })
 
   it('creates unique backup paths for rapid consecutive apply runs', () => {
@@ -219,6 +227,19 @@ describe('flyupMigrate', () => {
   it('respects the store lock while applying migrations', () => {
     fs.mkdirSync(tmp, { recursive: true })
     fs.writeFileSync(path.join(tmp, '.lock'), JSON.stringify({ pid: 999999, created_at: new Date().toISOString() }), 'utf8')
+
+    const result = flyupMigrate(new FlyupMemStore({ store_path: tmp }), { dryRun: false, lockTimeoutMs: 100 })
+
+    expect(result.ok).toBe(false)
+    expect(result.applied).toBe(false)
+    expect(result.steps.some(step => step.message.includes('Timed out waiting for FlyupMem store lock'))).toBe(true)
+    expect(fs.existsSync(path.join(tmp, 'schema.yaml'))).toBe(false)
+    fs.rmSync(path.join(tmp, '.lock'), { force: true })
+  })
+
+  it('does not treat a same-pid lock file as reentrant unless this process acquired it', () => {
+    fs.mkdirSync(tmp, { recursive: true })
+    fs.writeFileSync(path.join(tmp, '.lock'), JSON.stringify({ pid: process.pid, created_at: new Date().toISOString() }), 'utf8')
 
     const result = flyupMigrate(new FlyupMemStore({ store_path: tmp }), { dryRun: false, lockTimeoutMs: 100 })
 
