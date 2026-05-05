@@ -4,6 +4,7 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import * as yaml from 'js-yaml'
+import { execFileSync } from 'node:child_process'
 import { FlyupMemStore } from '../src/core/store.js'
 import { flyupMaintain, loadMaintenanceState } from '../src/tools/flyup_maintain.js'
 import type { Engram } from '../src/core/types.js'
@@ -12,6 +13,15 @@ import { contentHash } from '../src/core/hash.js'
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'flyupmem-maintain-'))
+}
+
+function runMaintainCli(defaultDir: string, args: string[]): string {
+  const tsx = path.resolve(__dirname, '..', 'node_modules', '.bin', 'tsx')
+  return execFileSync(tsx, ['src/index.ts', 'maintain', ...args], {
+    cwd: path.resolve(__dirname, '..'),
+    env: { ...process.env, FLYUPMEM_STORE_PATH: defaultDir },
+    encoding: 'utf-8',
+  })
 }
 
 function makeEngram(overrides: Partial<Engram> = {}): Engram {
@@ -95,4 +105,21 @@ describe('flyupMaintain tiered scheduler', () => {
     expect(result.state.last_rem_at).toBeTruthy()
     expect(loadMaintenanceState(store).last_rem_at).toBe(result.state.last_rem_at)
   })
+
+  it('CLI --store runs maintenance against the requested store path', () => {
+    const defaultDir = tmpDir()
+    const cliDir = tmpDir()
+
+    try {
+      const stdout = runMaintainCli(defaultDir, ['--mode', 'light', '--store', cliDir])
+      const parsed = JSON.parse(stdout.slice(stdout.indexOf('{')))
+
+      expect(parsed.mode).toBe('light')
+      expect(fs.existsSync(path.join(cliDir, '.maintenance.yaml'))).toBe(true)
+      expect(fs.existsSync(path.join(defaultDir, '.maintenance.yaml'))).toBe(false)
+    } finally {
+      fs.rmSync(defaultDir, { recursive: true, force: true })
+      fs.rmSync(cliDir, { recursive: true, force: true })
+    }
+  }, 30000)
 })

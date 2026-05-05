@@ -130,13 +130,21 @@ async function main() {
 
     case 'maintain': {
       const modeIdx = args.indexOf('--mode')
+      const storeIdx = args.indexOf('--store')
       const mode = (modeIdx >= 0 ? args[modeIdx + 1] : 'rem') as MaintainMode
+      const storePath = storeIdx >= 0 ? args[storeIdx + 1] : undefined
+      const usage = 'Usage: flyupmem maintain [--mode light|deep|rem] [--store path]'
       if (!['light', 'deep', 'rem'].includes(mode)) {
-        console.error('Usage: flyupmem maintain [--mode light|deep|rem]')
+        console.error(usage)
+        process.exit(1)
+      }
+      if (storeIdx >= 0 && !storePath) {
+        console.error(usage)
         process.exit(1)
       }
       console.log(`Running ${mode} maintenance...`)
-      const result = await flyupMaintain(store, { mode })
+      const maintainStore = storePath ? new FlyupMemStore({ store_path: storePath }) : store
+      const result = await flyupMaintain(maintainStore, { mode })
       console.log(JSON.stringify(result, null, 2))
       break
     }
@@ -447,7 +455,7 @@ Usage:
   flyupmem recall "<query>" [--explain]
   flyupmem status
   flyupmem feedback <memory-id> <positive|negative|neutral>
-  flyupmem maintain [--mode light|deep|rem]  # Tiered maintenance: graph / consolidation / REM
+  flyupmem maintain [--mode light|deep|rem] [--store path] # Tiered maintenance
   flyupmem reflect "<query>"                 # Synthesize Mental Models (needs LLM)
   flyupmem export [file.yaml]                # Export Knowledge Pack
   flyupmem import <file.yaml>                # Import Knowledge Pack

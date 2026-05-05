@@ -39,7 +39,7 @@ Without `FLYUPMEM_STORE_PATH`, FlyupMem uses `~/.flyupmem`.
 flyupmem learn "<user message>" ["<assistant message>"]
 flyupmem recall "<query>" [--explain]
 flyupmem feedback <memory-id> <positive|negative|neutral>
-flyupmem maintain
+flyupmem maintain [--mode light|deep|rem] [--store path]
 flyupmem doctor [--repair] [--json]
 flyupmem migrate [--dry-run|--apply]
 flyupmem checkpoint <label> [summary]

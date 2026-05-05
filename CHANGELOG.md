@@ -19,9 +19,9 @@
   - Git sync now tracks `schema.yaml`.
 - Added machine-readable `doctor --json` output for automation and CI health checks.
 - Added tiered maintenance scheduling:
-  - `flyupmem maintain --mode light` runs cheap graph refresh.
-  - `flyupmem maintain --mode deep` runs Observation consolidation plus graph refresh.
-  - `flyupmem maintain --mode rem` runs decay, consolidation, and graph refresh.
+  - `flyupmem maintain --mode light [--store path]` runs cheap graph refresh.
+  - `flyupmem maintain --mode deep [--store path]` runs Observation consolidation plus graph refresh.
+  - `flyupmem maintain --mode rem [--store path]` runs decay, consolidation, and graph refresh.
   - Maintenance writes `.maintenance.yaml` with last Light/Deep/REM run timestamps and last error.
 - Added Observation incremental upgrade during consolidation:
   - New clusters first try to match existing Observations by same scope/domain plus entity, tag, or text overlap.
