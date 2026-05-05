@@ -17,6 +17,15 @@
   - Reuses the current store save path to migrate old single-file `engrams.yaml` stores into the hot/archive chunk layout.
   - `doctor` now reports schema drift, and `doctor --repair` applies safe schema migrations.
   - Git sync now tracks `schema.yaml`.
+- Added machine-readable `doctor --json` output for automation and CI health checks.
+- Added tiered maintenance scheduling:
+  - `flyupmem maintain --mode light` runs cheap graph refresh.
+  - `flyupmem maintain --mode deep` runs Observation consolidation plus graph refresh.
+  - `flyupmem maintain --mode rem` runs decay, consolidation, and graph refresh.
+  - Maintenance writes `.maintenance.yaml` with last Light/Deep/REM run timestamps and last error.
+- Added Observation incremental upgrade during consolidation:
+  - New clusters first try to match existing Observations by same scope/domain plus entity, tag, or text overlap.
+  - Matching Observations accumulate new evidence, proof count, tags, entities, activation, confidence, and history instead of creating duplicates.
 - Added safe `doctor --repair` mode:
   - Removes stale `.lock` files only after they exceed the stale threshold.
   - Applies safe store schema migrations.

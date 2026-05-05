@@ -6,7 +6,7 @@ import { flyupLearn } from './tools/flyup_learn.js'
 import { flyupRecall, flyupRecallExplain } from './tools/flyup_recall.js'
 import { flyupStatus } from './tools/flyup_status.js'
 import { flyupFeedback } from './tools/flyup_feedback.js'
-import { flyupMaintain } from './tools/flyup_maintain.js'
+import { flyupMaintain, type MaintainMode } from './tools/flyup_maintain.js'
 import { flyupReflect } from './tools/flyup_reflect.js'
 import { flyupPack } from './tools/flyup_pack.js'
 import { flyupDoctor } from './tools/flyup_doctor.js'
@@ -25,6 +25,7 @@ export { SQLiteCache } from './core/sqlite-cache.js'
 export type { SQLiteCacheConfig, FTSResult, MetaRow } from './core/sqlite-cache.js'
 export type * from './core/types.js'
 export { flyupLearn, flyupRecall, flyupRecallExplain, flyupStatus, flyupFeedback, flyupMaintain }
+export type { MaintainMode, MaintainOptions, MaintainResult, MaintenanceState } from './tools/flyup_maintain.js'
 export { flyupDoctor } from './tools/flyup_doctor.js'
 export type { DoctorResult, DoctorCheck, DoctorRepair, DoctorOptions } from './tools/flyup_doctor.js'
 export { flyupSetup } from './tools/flyup_setup.js'
@@ -128,8 +129,14 @@ async function main() {
     }
 
     case 'maintain': {
-      console.log('Running maintenance...')
-      const result = await flyupMaintain(store)
+      const modeIdx = args.indexOf('--mode')
+      const mode = (modeIdx >= 0 ? args[modeIdx + 1] : 'rem') as MaintainMode
+      if (!['light', 'deep', 'rem'].includes(mode)) {
+        console.error('Usage: flyupmem maintain [--mode light|deep|rem]')
+        process.exit(1)
+      }
+      console.log(`Running ${mode} maintenance...`)
+      const result = await flyupMaintain(store, { mode })
       console.log(JSON.stringify(result, null, 2))
       break
     }
@@ -440,7 +447,7 @@ Usage:
   flyupmem recall "<query>" [--explain]
   flyupmem status
   flyupmem feedback <memory-id> <positive|negative|neutral>
-  flyupmem maintain                          # Decay + consolidation + graph
+  flyupmem maintain [--mode light|deep|rem]  # Tiered maintenance: graph / consolidation / REM
   flyupmem reflect "<query>"                 # Synthesize Mental Models (needs LLM)
   flyupmem export [file.yaml]                # Export Knowledge Pack
   flyupmem import <file.yaml>                # Import Knowledge Pack
