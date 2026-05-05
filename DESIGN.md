@@ -1409,7 +1409,7 @@ recall 含 BM25 + 图谱 + 时序 + activation 加权 + 9 维 rerank；默认 `r
 - [x] Git sync（跨机记忆同步）— MVP: init/status/push/pull/sync，YAML 为源，SQLite 为可重建派生缓存
 
 ### Phase 5 — 生产化 *(v3)*
-- [ ] doctor / setup / status 命令
+- [x] doctor / setup / status 命令 — `doctor --repair` 支持安全修复 stale lock、SQLite cache、dangling graph refs、Engram chunks；重复 ID/secret 仍只报告不自动删除
 - [ ] memory inspect UI
 - [ ] 配置面板
 - [x] memory review/prune CLI — 本地记忆质量维护，dry-run 默认，安全退休 dogfood/test marker

@@ -25,7 +25,7 @@ export type { SQLiteCacheConfig, FTSResult, MetaRow } from './core/sqlite-cache.
 export type * from './core/types.js'
 export { flyupLearn, flyupRecall, flyupRecallExplain, flyupStatus, flyupFeedback, flyupMaintain }
 export { flyupDoctor } from './tools/flyup_doctor.js'
-export type { DoctorResult, DoctorCheck } from './tools/flyup_doctor.js'
+export type { DoctorResult, DoctorCheck, DoctorRepair, DoctorOptions } from './tools/flyup_doctor.js'
 export { flyupSetup } from './tools/flyup_setup.js'
 export type { SetupResult, SetupStep } from './tools/flyup_setup.js'
 export { flyupInspect } from './tools/flyup_inspect.js'
@@ -167,8 +167,20 @@ async function main() {
       break
     }
     case 'doctor': {
-      console.log('Running doctor checks...\n')
-      const result = await flyupDoctor(store)
+      const repair = args.includes('--repair')
+      console.log(repair ? 'Running doctor checks and safe repairs...\n' : 'Running doctor checks...\n')
+      const result = await flyupDoctor(store, { repair })
+      if (result.repairs?.length) {
+        console.log('Repairs:')
+        for (const repairResult of result.repairs) {
+          const icon = repairResult.status === 'repaired' ? '🛠️ ' : repairResult.status === 'skipped' ? '⏭️ ' : '❌'
+          console.log(`${icon} ${repairResult.name}: ${repairResult.message}`)
+          if (repairResult.details) {
+            for (const d of repairResult.details) console.log(`   └─ ${d}`)
+          }
+        }
+        console.log('\nChecks:')
+      }
       for (const check of result.checks) {
         const icon = check.status === 'pass' ? '✅' : check.status === 'warn' ? '⚠️ ' : '❌'
         console.log(`${icon} ${check.name}: ${check.message}`)
@@ -401,7 +413,7 @@ Usage:
   flyupmem export [file.yaml]                # Export Knowledge Pack
   flyupmem import <file.yaml>                # Import Knowledge Pack
   flyupmem embed-init                        # Pre-load embedding model
-  flyupmem doctor                            # Deep health check
+  flyupmem doctor [--repair]                 # Deep health check; --repair runs safe repairs
   flyupmem setup [--force]                   # Environment check + store init
   flyupmem inspect <memory-id> [--json]      # Inspect memory detail & activation
   flyupmem checkpoint <label> [summary]      # Record a recovery checkpoint

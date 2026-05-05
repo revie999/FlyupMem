@@ -4,6 +4,12 @@
 
 ### Added
 
+- Added safe `doctor --repair` mode:
+  - Removes stale `.lock` files only after they exceed the stale threshold.
+  - Rebuilds `index.sqlite` from YAML source of truth.
+  - Prunes dangling graph edges/entity references.
+  - Rewrites `engrams.yaml` plus `engrams.d/*` according to `max_engrams_per_file`.
+  - Skips load-dependent repairs when YAML is not parseable, and does not auto-delete duplicate IDs or secret-like memories.
 - Added automatic Engram YAML archive splitting:
   - `engrams.yaml` now keeps only the newest/hot tail capped by `max_engrams_per_file` (default `5000`).
   - Older engrams are written to numbered chunks under `engrams.d/engrams-000001.yaml`, `engrams-000002.yaml`, etc.

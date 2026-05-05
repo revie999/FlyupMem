@@ -10,6 +10,7 @@ import { isEmbeddingAvailable } from '../search/embed.js'
 export interface DoctorResult {
   overall: 'healthy' | 'warning' | 'error'
   checks: DoctorCheck[]
+  repairs?: DoctorRepair[]
 }
 
 export interface DoctorCheck {
@@ -19,11 +20,24 @@ export interface DoctorCheck {
   details?: string[]
 }
 
+export interface DoctorRepair {
+  name: string
+  status: 'repaired' | 'skipped' | 'failed'
+  message: string
+  details?: string[]
+}
+
+export interface DoctorOptions {
+  repair?: boolean
+  staleLockMs?: number
+}
+
 /**
  * Deep health check: validates store integrity, YAML parsability,
  * ID uniqueness, graph consistency, and embedding availability.
  */
-export async function flyupDoctor(store: FlyupMemStore): Promise<DoctorResult> {
+export async function flyupDoctor(store: FlyupMemStore, options: DoctorOptions = {}): Promise<DoctorResult> {
+  const repairs = options.repair ? runRepairs(store, options) : undefined
   const checks: DoctorCheck[] = []
   const basePath = store.basePath
 
@@ -62,7 +76,7 @@ export async function flyupDoctor(store: FlyupMemStore): Promise<DoctorResult> {
   const hasWarn = checks.some(c => c.status === 'warn')
   const overall = hasFail ? 'error' : hasWarn ? 'warning' : 'healthy'
 
-  return { overall, checks }
+  return { overall, checks, repairs }
 }
 
 // ─── Individual checks ────────────────────────────────────────
@@ -275,4 +289,151 @@ function checkHermesPlugin(): DoctorCheck {
     return { name: 'hermes-plugin', status: 'pass', message: `Hermes plugin linked: ${target}` }
   }
   return { name: 'hermes-plugin', status: 'warn', message: 'Hermes plugin not linked (optional)' }
+}
+
+// ─── Safe repairs ─────────────────────────────────────────────
+
+function runRepairs(store: FlyupMemStore, options: DoctorOptions): DoctorRepair[] {
+  const repairs: DoctorRepair[] = []
+
+  repairs.push(repairStaleLock(store.basePath, options.staleLockMs ?? 15 * 60_000))
+  const yamlIssues = yamlParseIssues(store.basePath)
+  if (yamlIssues.length > 0) {
+    repairs.push({
+      name: 'yaml-dependent-repairs',
+      status: 'skipped',
+      message: 'Skipped SQLite/graph/chunk repairs because YAML is not fully parseable',
+      details: yamlIssues.slice(0, 10),
+    })
+    return repairs
+  }
+  repairs.push(repairSQLiteCache(store))
+  repairs.push(repairGraphIntegrity(store))
+  repairs.push(repairEngramChunks(store))
+
+  return repairs
+}
+
+function yamlParseIssues(basePath: string): string[] {
+  const files = [
+    'engrams.yaml', 'observations.yaml', 'mental-models.yaml',
+    'episodes.yaml', 'graph.yaml', 'feedback.yaml',
+  ].map(file => path.join(basePath, file))
+
+  const chunkDir = path.join(basePath, 'engrams.d')
+  if (fs.existsSync(chunkDir)) {
+    for (const name of fs.readdirSync(chunkDir)) {
+      if (name.endsWith('.yaml')) files.push(path.join(chunkDir, name))
+    }
+  }
+
+  const issues: string[] = []
+  for (const filePath of files) {
+    if (!fs.existsSync(filePath)) continue
+    try {
+      yaml.load(fs.readFileSync(filePath, 'utf-8'))
+    } catch (err) {
+      issues.push(`${path.relative(basePath, filePath)}: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  return issues
+}
+
+function repairStaleLock(basePath: string, staleLockMs: number): DoctorRepair {
+  const lockPath = path.join(basePath, '.lock')
+  if (!fs.existsSync(lockPath)) {
+    return { name: 'stale-lock', status: 'skipped', message: 'No lock file present' }
+  }
+
+  try {
+    const ageMs = Date.now() - fs.statSync(lockPath).mtimeMs
+    if (ageMs < staleLockMs) {
+      return {
+        name: 'stale-lock',
+        status: 'skipped',
+        message: `Lock file is recent (${Math.round(ageMs / 1000)}s old); left untouched`,
+      }
+    }
+    fs.unlinkSync(lockPath)
+    return {
+      name: 'stale-lock',
+      status: 'repaired',
+      message: `Removed stale lock file (${Math.round(ageMs / 1000)}s old)`,
+    }
+  } catch (err) {
+    return { name: 'stale-lock', status: 'failed', message: 'Failed to inspect/remove lock file', details: [String(err)] }
+  }
+}
+
+function repairSQLiteCache(store: FlyupMemStore): DoctorRepair {
+  try {
+    store.load()
+    store.cache.close()
+    for (const suffix of ['', '-wal', '-shm']) {
+      const dbPath = path.join(store.basePath, `index.sqlite${suffix}`)
+      if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath)
+    }
+    store.cache.open()
+    const result = store.cache.rebuildFromData({
+      engrams: store.engrams,
+      observations: store.observations,
+      mentalModels: store.mentalModels,
+    })
+    return {
+      name: 'sqlite-cache',
+      status: 'repaired',
+      message: `Rebuilt SQLite cache from YAML (${result.indexed} memories indexed)`,
+    }
+  } catch (err) {
+    return { name: 'sqlite-cache', status: 'failed', message: 'Failed to rebuild SQLite cache', details: [String(err)] }
+  }
+}
+
+function repairGraphIntegrity(store: FlyupMemStore): DoctorRepair {
+  try {
+    store.load()
+    const allIds = new Set(store.allMemories().map(m => m.id))
+    const graph = store.graph
+    const beforeEdges = graph.edges.length
+    const beforeEntities = Object.keys(graph.entities).length
+
+    graph.edges = graph.edges.filter(edge => allIds.has(edge.from) && allIds.has(edge.to))
+    for (const [name, entity] of Object.entries(graph.entities)) {
+      entity.memory_ids = entity.memory_ids.filter(id => allIds.has(id))
+      if (entity.memory_ids.length === 0) delete graph.entities[name]
+    }
+
+    const removedEdges = beforeEdges - graph.edges.length
+    const removedEntities = beforeEntities - Object.keys(graph.entities).length
+    if (removedEdges === 0 && removedEntities === 0) {
+      return { name: 'graph-integrity', status: 'skipped', message: 'No dangling graph references found' }
+    }
+
+    store.save()
+    return {
+      name: 'graph-integrity',
+      status: 'repaired',
+      message: `Removed ${removedEdges} dangling edge(s) and ${removedEntities} empty entity/entities`,
+    }
+  } catch (err) {
+    return { name: 'graph-integrity', status: 'failed', message: 'Failed to repair graph references', details: [String(err)] }
+  }
+}
+
+function repairEngramChunks(store: FlyupMemStore): DoctorRepair {
+  try {
+    store.load()
+    store.save()
+    const chunkDir = path.join(store.basePath, 'engrams.d')
+    const chunkCount = fs.existsSync(chunkDir)
+      ? fs.readdirSync(chunkDir).filter(name => name.endsWith('.yaml')).length
+      : 0
+    return {
+      name: 'engram-chunks',
+      status: 'repaired',
+      message: `Rewrote engram hot tail/archive layout (${chunkCount} archive chunk(s))`,
+    }
+  } catch (err) {
+    return { name: 'engram-chunks', status: 'failed', message: 'Failed to rewrite engram chunks', details: [String(err)] }
+  }
 }
