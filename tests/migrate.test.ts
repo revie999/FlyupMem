@@ -178,6 +178,57 @@ describe('flyupMigrate', () => {
     expect(result.overall).toBe('error')
   })
 
+  it('does not migrate or doctor-repair stores from a future schema version', async () => {
+    fs.mkdirSync(tmp, { recursive: true })
+    const futureSchema = {
+      schema_version: 999,
+      last_migrated_at: new Date().toISOString(),
+      migrations_applied: [],
+    }
+    fs.writeFileSync(path.join(tmp, 'schema.yaml'), yaml.dump(futureSchema), 'utf8')
+    const before = fs.readFileSync(path.join(tmp, 'schema.yaml'), 'utf8')
+
+    const migrate = flyupMigrate(new FlyupMemStore({ store_path: tmp }), { dryRun: false })
+    expect(migrate.ok).toBe(false)
+    expect(migrate.applied).toBe(false)
+    expect(migrate.backupPath).toBeUndefined()
+    expect(fs.readFileSync(path.join(tmp, 'schema.yaml'), 'utf8')).toBe(before)
+
+    const repaired = await flyupDoctor(new FlyupMemStore({ store_path: tmp }), { repair: true })
+    const repair = repaired.repairs!.find(r => r.name === 'schema-migrations')!
+    expect(repair.status).toBe('failed')
+    expect(fs.readFileSync(path.join(tmp, 'schema.yaml'), 'utf8')).toBe(before)
+  })
+
+  it('creates unique backup paths for rapid consecutive apply runs', () => {
+    fs.mkdirSync(tmp, { recursive: true })
+    fs.writeFileSync(path.join(tmp, 'engrams.yaml'), yaml.dump([oldEngram('MIGRATE-BACKUP-001')], { lineWidth: 120, noRefs: true }), 'utf8')
+
+    const first = flyupMigrate(new FlyupMemStore({ store_path: tmp }), { dryRun: false })
+    const second = flyupMigrate(new FlyupMemStore({ store_path: tmp }), { dryRun: false })
+
+    expect(first.ok).toBe(true)
+    expect(second.ok).toBe(true)
+    expect(first.backupPath).toBeDefined()
+    expect(second.backupPath).toBeDefined()
+    expect(first.backupPath).not.toBe(second.backupPath)
+    expect(fs.existsSync(first.backupPath!)).toBe(true)
+    expect(fs.existsSync(second.backupPath!)).toBe(true)
+  })
+
+  it('respects the store lock while applying migrations', () => {
+    fs.mkdirSync(tmp, { recursive: true })
+    fs.writeFileSync(path.join(tmp, '.lock'), JSON.stringify({ pid: 999999, created_at: new Date().toISOString() }), 'utf8')
+
+    const result = flyupMigrate(new FlyupMemStore({ store_path: tmp }), { dryRun: false, lockTimeoutMs: 100 })
+
+    expect(result.ok).toBe(false)
+    expect(result.applied).toBe(false)
+    expect(result.steps.some(step => step.message.includes('Timed out waiting for FlyupMem store lock'))).toBe(true)
+    expect(fs.existsSync(path.join(tmp, 'schema.yaml'))).toBe(false)
+    fs.rmSync(path.join(tmp, '.lock'), { force: true })
+  })
+
   it('rewrites old single-file engrams into archive chunks', () => {
     fs.mkdirSync(tmp, { recursive: true })
     fs.writeFileSync(path.join(tmp, 'engrams.yaml'), yaml.dump(

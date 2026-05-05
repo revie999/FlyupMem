@@ -9,8 +9,10 @@
   - Writes `schema.yaml` with `schema_version`, `last_migrated_at`, and applied migration IDs.
   - Backfills old YAML records missing `activation.turn_count` and Engram `adoption_count`.
   - Preserves explicit user config values while adding missing defaults.
-  - Creates `.backups/migrate-*` snapshots before apply and rolls back from backup on migration failure.
+  - Creates unique `.backups/migrate-*` snapshots before apply and rolls back from backup on migration failure.
   - Detects invalid, incomplete, or future `schema.yaml` metadata in `doctor`.
+  - Refuses to migrate or `doctor --repair` stores whose `schema_version` is newer than this CLI supports.
+  - Takes the store `.lock` during apply-mode migrations to avoid concurrent writer races.
   - Ensures `config.yaml` includes `recall_activation_persistence` and `graph.yaml` has the default `{ entities, edges }` shape.
   - Reuses the current store save path to migrate old single-file `engrams.yaml` stores into the hot/archive chunk layout.
   - `doctor` now reports schema drift, and `doctor --repair` applies safe schema migrations.

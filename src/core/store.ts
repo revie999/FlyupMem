@@ -101,7 +101,7 @@ function sleepSync(ms: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
 }
 
-function acquireLockSync(lockPath: string, timeoutMs = 5_000): () => void {
+export function acquireLockSync(lockPath: string, timeoutMs = 5_000): () => void {
   fs.mkdirSync(path.dirname(lockPath), { recursive: true })
   const start = Date.now()
   while (true) {
@@ -115,6 +115,11 @@ function acquireLockSync(lockPath: string, timeoutMs = 5_000): () => void {
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code
       if (code !== 'EEXIST') throw err
+      try {
+        const raw = fs.readFileSync(lockPath, 'utf-8')
+        const lock = JSON.parse(raw) as { pid?: number }
+        if (lock.pid === process.pid) return () => {}
+      } catch {}
       try {
         const ageMs = Date.now() - fs.statSync(lockPath).mtimeMs
         if (ageMs > timeoutMs * 3) {

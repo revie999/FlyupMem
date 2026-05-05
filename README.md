@@ -50,7 +50,7 @@ flyupmem embed-init
 flyupmem benchmark --counts 1000,5000,10000 --format markdown --out /tmp/flyupmem-benchmark.md
 ```
 
-`migrate` is dry-run by default. Use `flyupmem migrate --apply` to write store schema metadata, backfill old YAML fields such as `activation.turn_count` and `adoption_count`, preserve explicit user config values while filling missing defaults, ensure default `graph.yaml`, and rewrite engram chunks using the current archive layout. Apply mode creates a `.backups/migrate-*` snapshot before touching YAML and rolls back from it if a migration step fails.
+`migrate` is dry-run by default. Use `flyupmem migrate --apply` to write store schema metadata, backfill old YAML fields such as `activation.turn_count` and `adoption_count`, preserve explicit user config values while filling missing defaults, ensure default `graph.yaml`, and rewrite engram chunks using the current archive layout. Apply mode takes the store `.lock`, refuses stores whose `schema_version` is newer than the CLI supports, creates a unique `.backups/migrate-*` snapshot before touching YAML, and rolls back from it if a migration step fails.
 
 `doctor --repair` runs safe repairs only: stale lock cleanup, store schema migrations with backup/rollback, SQLite cache rebuild, dangling graph reference pruning, and engram hot/archive chunk rewrite. It does not delete duplicate IDs or secret-like memories automatically.
 

@@ -4,7 +4,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as yaml from 'js-yaml'
 import type { FlyupMemStore } from '../core/store.js'
-import { FlyupMemStore as Store } from '../core/store.js'
+import { acquireLockSync, FlyupMemStore as Store } from '../core/store.js'
 import { DEFAULT_CONFIG } from '../core/types.js'
 
 export const CURRENT_STORE_SCHEMA_VERSION = 1
@@ -27,6 +27,7 @@ export interface StoreSchemaMeta {
 
 export interface MigrateOptions {
   dryRun?: boolean
+  lockTimeoutMs?: number
 }
 
 export interface MigrationStep {
@@ -114,30 +115,41 @@ export function flyupMigrate(store: FlyupMemStore, options: MigrateOptions = {})
   const beforeMeta = loadStoreSchemaMeta(basePath)
   const steps: MigrationStep[] = []
   let backupPath: string | undefined
+  let releaseLock: (() => void) | undefined
 
   try {
     fs.mkdirSync(basePath, { recursive: true })
 
-    if (!dryRun) {
-      backupPath = createMigrationBackup(basePath)
+    if (beforeMeta.schema_version > CURRENT_STORE_SCHEMA_VERSION) {
       steps.push({
-        id: 'backup',
-        status: 'applied',
-        message: `Created migration backup: ${backupPath}`,
+        id: 'schema-metadata',
+        status: 'failed',
+        message: `Store schema v${beforeMeta.schema_version} is newer than this CLI supports (v${CURRENT_STORE_SCHEMA_VERSION}); refusing to migrate`,
+        details: ['Upgrade FlyupMem before running migrations or repairs'],
       })
-    }
+    } else {
+      if (!dryRun) {
+        releaseLock = acquireLockSync(path.join(basePath, '.lock'), options.lockTimeoutMs)
+        backupPath = createMigrationBackup(basePath)
+        steps.push({
+          id: 'backup',
+          status: 'applied',
+          message: `Created migration backup: ${backupPath}`,
+        })
+      }
 
-    steps.push(migrateActivationTurnCount(basePath, dryRun))
-    steps.push(migrateEngramAdoptionCount(basePath, dryRun))
-    steps.push(migrateConfigDefaults(basePath, dryRun))
-    steps.push(migrateGraphDefault(basePath, dryRun))
-    steps.push(rewriteEngramChunks(store, dryRun))
-    steps.push(updateSchemaMetadata(basePath, beforeMeta, dryRun))
+      steps.push(migrateActivationTurnCount(basePath, dryRun))
+      steps.push(migrateEngramAdoptionCount(basePath, dryRun))
+      steps.push(migrateConfigDefaults(basePath, dryRun))
+      steps.push(migrateGraphDefault(basePath, dryRun))
+      steps.push(rewriteEngramChunks(store, dryRun))
+      steps.push(updateSchemaMetadata(basePath, beforeMeta, dryRun))
+    }
   } catch (err) {
     steps.push({
       id: 'schema-metadata',
       status: 'failed',
-      message: 'Migration failed',
+      message: err instanceof Error ? err.message : 'Migration failed',
       details: [err instanceof Error ? err.message : String(err)],
     })
     if (!dryRun && backupPath) {
@@ -157,6 +169,8 @@ export function flyupMigrate(store: FlyupMemStore, options: MigrateOptions = {})
         })
       }
     }
+  } finally {
+    if (releaseLock) releaseLock()
   }
 
   const hasFailed = steps.some(step => step.status === 'failed')
@@ -355,8 +369,14 @@ function stepResult(
 }
 
 function createMigrationBackup(basePath: string): string {
-  const backupPath = path.join(basePath, '.backups', `migrate-${timestampForPath()}`)
-  fs.mkdirSync(backupPath, { recursive: true })
+  let backupPath = path.join(basePath, '.backups', `migrate-${timestampForPath()}`)
+  let suffix = 0
+  while (fs.existsSync(backupPath)) {
+    suffix++
+    backupPath = path.join(basePath, '.backups', `migrate-${timestampForPath()}-${suffix.toString().padStart(3, '0')}`)
+  }
+  fs.mkdirSync(path.dirname(backupPath), { recursive: true })
+  fs.mkdirSync(backupPath, { recursive: false })
   for (const filePath of migratableYamlFiles(basePath)) {
     if (!fs.existsSync(filePath)) continue
     const relative = path.relative(basePath, filePath)
@@ -452,7 +472,9 @@ function writeYaml(filePath: string, data: unknown): void {
 }
 
 function timestampForPath(): string {
-  return new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}Z$/, 'Z')
+  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\./g, '')
+  const random = Math.random().toString(36).slice(2, 8)
+  return `${stamp}-${process.pid}-${random}`
 }
 
 function isRecord(value: unknown): value is YamlRecord {
