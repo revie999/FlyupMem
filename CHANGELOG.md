@@ -4,8 +4,20 @@
 
 ### Added
 
+- Added store schema migration framework:
+  - New `flyupmem migrate [--dry-run|--apply]` command; dry-run is the default.
+  - Writes `schema.yaml` with `schema_version`, `last_migrated_at`, and applied migration IDs.
+  - Backfills old YAML records missing `activation.turn_count` and Engram `adoption_count`.
+  - Preserves explicit user config values while adding missing defaults.
+  - Creates `.backups/migrate-*` snapshots before apply and rolls back from backup on migration failure.
+  - Detects invalid, incomplete, or future `schema.yaml` metadata in `doctor`.
+  - Ensures `config.yaml` includes `recall_activation_persistence` and `graph.yaml` has the default `{ entities, edges }` shape.
+  - Reuses the current store save path to migrate old single-file `engrams.yaml` stores into the hot/archive chunk layout.
+  - `doctor` now reports schema drift, and `doctor --repair` applies safe schema migrations.
+  - Git sync now tracks `schema.yaml`.
 - Added safe `doctor --repair` mode:
   - Removes stale `.lock` files only after they exceed the stale threshold.
+  - Applies safe store schema migrations.
   - Rebuilds `index.sqlite` from YAML source of truth.
   - Prunes dangling graph edges/entity references.
   - Rewrites `engrams.yaml` plus `engrams.d/*` according to `max_engrams_per_file`.

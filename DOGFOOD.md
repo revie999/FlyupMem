@@ -760,3 +760,27 @@ cp /Users/gm99/.hermes/config.yaml.bak.flyupmem-20260501-221432 ~/.hermes/config
 
 **结论：** write-light recall 已经解决主要在线读取延迟瓶颈；下一步归档/分片仍有价值，但优先级应转向控制 learn/save/load 和长期 YAML 体积，而不是 recall 搜索路径。
 
+---
+
+### 2026-05-05 — Store Schema Migration ✅ PASS
+
+**新增能力：**
+- `flyupmem migrate [--dry-run|--apply]`：正式 store schema migration CLI，默认 dry-run。
+- 新增 `schema.yaml`：记录 `schema_version`、`last_migrated_at`、`migrations_applied`。
+- 首批安全迁移：
+  - 回填旧 memory 的 `activation.turn_count: 0`。
+  - 回填旧 Engram 的 `adoption_count: 0`。
+  - 确保 `config.yaml` 缺失时补 `recall_activation_persistence: sqlite`，但保留用户显式配置值。
+  - 确保 `graph.yaml` 有 `entities: {}` 和 `edges: []`。
+  - `--apply` 写 YAML 前创建 `.backups/migrate-*` 快照；迁移失败时从备份 rollback。
+  - `doctor` 能识别 invalid / incomplete / future `schema.yaml`。
+  - 复用现有 store save path，把旧单文件 `engrams.yaml` 迁移到热尾部 + `engrams.d/*` archive chunk。
+- `doctor` 新增 schema version 检查；`doctor --repair` 会应用安全迁移。
+- Git sync 纳入 `schema.yaml`。
+
+**验证：**
+- `npm run build`：通过。
+- 目标测试：`tests/migrate.test.ts` + `tests/doctor.test.ts` + `tests/setup.test.ts`，24/24 通过；新增覆盖 config 保留、backup/rollback、schema metadata incomplete/future/invalid 检查。
+- `npm test` 等价默认 TS 套件（排除 sync/benchmark，single fork）：24 files / 206 tests 通过；Hermes plugin boundary 8/8 通过。
+- `npm run test:sync`：5/5 通过；sync 集成测试超时阈值从 15s 调到 30s，避免真实 Git I/O 偶发超时。
+- dist CLI dogfood：临时旧 store 执行 `migrate --dry-run` + `migrate --apply`，确认 `schema.yaml` 写入、`turn_count`/`adoption_count` 回填、用户 `recall_activation_persistence: yaml` 被保留、backup path 输出。

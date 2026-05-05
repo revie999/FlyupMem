@@ -70,6 +70,7 @@ describe('flyupDoctor', () => {
     const names = result.checks.map(c => c.name)
     expect(names).toContain('store-path')
     expect(names).toContain('yaml-parsing')
+    expect(names).toContain('schema-version')
     expect(names).toContain('unique-ids')
     expect(names).toContain('graph-integrity')
     expect(names).toContain('temporal')

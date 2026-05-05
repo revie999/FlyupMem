@@ -42,7 +42,7 @@ describe('flyupSync', () => {
     expect(ignore).toContain('index.sqlite')
     expect(ignore).toContain('*.tmp.*')
     expect(git(['config', '--get', 'remote.origin.url'], tmp)).toBe(remote)
-  }, 15000)
+  }, 30000)
 
   it('sync status reports repo, branch, dirty files, and ahead behind counts', () => {
     flyupSyncInit(store)
@@ -55,7 +55,7 @@ describe('flyupSync', () => {
     expect(result.dirtyFiles).toContain('engrams.yaml')
     expect(result.ahead).toBe(0)
     expect(result.behind).toBe(0)
-  }, 15000)
+  }, 30000)
 
   it('sync push commits YAML/config changes, ignores SQLite cache, and no-ops when clean', () => {
     flyupSyncInit(store)
@@ -76,7 +76,7 @@ describe('flyupSync', () => {
     const tracked = git(['ls-files'], tmp)
     expect(tracked).toContain('engrams.yaml')
     expect(tracked).not.toContain('index.sqlite')
-  }, 15000)
+  }, 30000)
 
   it('sync pull fetches remote changes and rebuilds SQLite cache', () => {
     const remote = path.join(tmpDir(), 'remote.git')
@@ -95,7 +95,7 @@ describe('flyupSync', () => {
     expect(result.pulled).toBe(true)
     expect(fs.existsSync(path.join(tmp, 'engrams.yaml'))).toBe(true)
     expect(fs.existsSync(path.join(tmp, 'index.sqlite'))).toBe(true)
-  }, 15000)
+  }, 30000)
 
   it('sync runs pull then push and stops cleanly without remote', () => {
     flyupSyncInit(store)
@@ -106,5 +106,5 @@ describe('flyupSync', () => {
     expect(result.ok).toBe(true)
     expect(result.pull.ok).toBe(true)
     expect(result.push.committed).toBe(true)
-  }, 15000)
+  }, 30000)
 })

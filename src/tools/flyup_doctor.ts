@@ -3,9 +3,10 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as yaml from 'js-yaml'
-import type { FlyupMemStore } from '../core/store.js'
+import { FlyupMemStore } from '../core/store.js'
 import type { Memory } from '../core/types.js'
 import { isEmbeddingAvailable } from '../search/embed.js'
+import { CURRENT_STORE_SCHEMA_VERSION, flyupMigrate, loadStoreSchemaMetaStrict, missingMigrationIds } from './flyup_migrate.js'
 
 export interface DoctorResult {
   overall: 'healthy' | 'warning' | 'error'
@@ -50,25 +51,28 @@ export async function flyupDoctor(store: FlyupMemStore, options: DoctorOptions =
   // ─── 3. Zod schema validation (via store.load) ───────────
   checks.push(checkSchemaValidation(store))
 
-  // ─── 4. Duplicate ID check ───────────────────────────────
+  // ─── 4. Store schema version ─────────────────────────────
+  checks.push(checkSchemaVersion(basePath))
+
+  // ─── 5. Duplicate ID check ───────────────────────────────
   checks.push(checkDuplicateIds(store))
 
-  // ─── 5. Graph integrity ──────────────────────────────────
+  // ─── 6. Graph integrity ──────────────────────────────────
   checks.push(checkGraphIntegrity(store))
 
-  // ─── 6. Temporal consistency ─────────────────────────────
+  // ─── 7. Temporal consistency ─────────────────────────────
   checks.push(checkTemporalConsistency(store))
 
-  // ─── 7. Activation range ─────────────────────────────────
+  // ─── 8. Activation range ─────────────────────────────────
   checks.push(checkActivationRange(store))
 
-  // ─── 8. Embedding availability ───────────────────────────
+  // ─── 9. Embedding availability ───────────────────────────
   checks.push(await checkEmbedding())
 
-  // ─── 9. File size warnings ───────────────────────────────
+  // ─── 10. File size warnings ──────────────────────────────
   checks.push(checkFileSizes(basePath))
 
-  // ─── 10. Hermes plugin link ──────────────────────────────
+  // ─── 11. Hermes plugin link ──────────────────────────────
   checks.push(checkHermesPlugin())
 
   // ─── Compute overall ─────────────────────────────────────
@@ -97,16 +101,13 @@ function checkStorePath(basePath: string): DoctorCheck {
 }
 
 function checkYamlFiles(basePath: string): DoctorCheck {
-  const yamlFiles = [
-    'engrams.yaml', 'observations.yaml', 'mental-models.yaml',
-    'episodes.yaml', 'graph.yaml', 'feedback.yaml',
-  ]
+  const yamlFiles = yamlFilePaths(basePath)
   const issues: string[] = []
   const parsed: string[] = []
 
-  for (const file of yamlFiles) {
-    const fp = path.join(basePath, file)
+  for (const fp of yamlFiles) {
     if (!fs.existsSync(fp)) continue
+    const file = path.relative(basePath, fp)
     try {
       const raw = fs.readFileSync(fp, 'utf-8')
       yaml.load(raw)
@@ -150,6 +151,16 @@ function checkSchemaValidation(store: FlyupMemStore): DoctorCheck {
       }
     } catch { /* already caught by yaml-parsing check */ }
   }
+  const chunkDir = path.join(basePath, 'engrams.d')
+  if (fs.existsSync(chunkDir)) {
+    for (const name of fs.readdirSync(chunkDir)) {
+      if (!name.endsWith('.yaml')) continue
+      try {
+        const raw = yaml.load(fs.readFileSync(path.join(chunkDir, name), 'utf-8'))
+        if (Array.isArray(raw)) rawCount += raw.length
+      } catch { /* already caught by yaml-parsing check */ }
+    }
+  }
 
   validCount = store.engrams.length + store.observations.length +
     store.mentalModels.length + store.episodes.length + store.feedback.length
@@ -164,6 +175,50 @@ function checkSchemaValidation(store: FlyupMemStore): DoctorCheck {
     }
   }
   return { name: 'schema-validation', status: 'pass', message: `All ${validCount} entries pass schema validation` }
+}
+
+function checkSchemaVersion(basePath: string): DoctorCheck {
+  const loaded = loadStoreSchemaMetaStrict(basePath)
+  if (!loaded.ok) {
+    return {
+      name: 'schema-version',
+      status: 'fail',
+      message: 'schema.yaml is invalid',
+      details: ['error' in loaded ? loaded.error : 'schema.yaml failed validation'],
+    }
+  }
+
+  const meta = loaded.meta
+  const missingIds = missingMigrationIds(meta)
+  if (meta.schema_version > CURRENT_STORE_SCHEMA_VERSION) {
+    return {
+      name: 'schema-version',
+      status: 'warn',
+      message: `Store schema v${meta.schema_version} is newer than this CLI supports (v${CURRENT_STORE_SCHEMA_VERSION})`,
+      details: ['Upgrade FlyupMem before running migrations or repairs'],
+    }
+  }
+  if (meta.schema_version < CURRENT_STORE_SCHEMA_VERSION) {
+    return {
+      name: 'schema-version',
+      status: 'warn',
+      message: `Store schema v${meta.schema_version} is behind current v${CURRENT_STORE_SCHEMA_VERSION}`,
+      details: ['Run: flyupmem migrate --apply'],
+    }
+  }
+  if (missingIds.length > 0) {
+    return {
+      name: 'schema-version',
+      status: 'warn',
+      message: `Store schema v${meta.schema_version} is missing ${missingIds.length} migration marker(s)`,
+      details: [`missing migrations: ${missingIds.join(', ')}`, 'Run: flyupmem migrate --apply'],
+    }
+  }
+  return {
+    name: 'schema-version',
+    status: 'pass',
+    message: `Store schema v${meta.schema_version} is current`,
+  }
 }
 
 function checkDuplicateIds(store: FlyupMemStore): DoctorCheck {
@@ -307,28 +362,19 @@ function runRepairs(store: FlyupMemStore, options: DoctorOptions): DoctorRepair[
     })
     return repairs
   }
-  repairs.push(repairSQLiteCache(store))
-  repairs.push(repairGraphIntegrity(store))
-  repairs.push(repairEngramChunks(store))
+  repairs.push(repairSchemaMigrations(store))
+
+  const freshStore = new FlyupMemStore(store.config)
+  repairs.push(repairSQLiteCache(freshStore))
+  repairs.push(repairGraphIntegrity(freshStore))
+  repairs.push(repairEngramChunks(freshStore))
 
   return repairs
 }
 
 function yamlParseIssues(basePath: string): string[] {
-  const files = [
-    'engrams.yaml', 'observations.yaml', 'mental-models.yaml',
-    'episodes.yaml', 'graph.yaml', 'feedback.yaml',
-  ].map(file => path.join(basePath, file))
-
-  const chunkDir = path.join(basePath, 'engrams.d')
-  if (fs.existsSync(chunkDir)) {
-    for (const name of fs.readdirSync(chunkDir)) {
-      if (name.endsWith('.yaml')) files.push(path.join(chunkDir, name))
-    }
-  }
-
   const issues: string[] = []
-  for (const filePath of files) {
+  for (const filePath of yamlFilePaths(basePath)) {
     if (!fs.existsSync(filePath)) continue
     try {
       yaml.load(fs.readFileSync(filePath, 'utf-8'))
@@ -337,6 +383,21 @@ function yamlParseIssues(basePath: string): string[] {
     }
   }
   return issues
+}
+
+function yamlFilePaths(basePath: string): string[] {
+  const files = [
+    'engrams.yaml', 'observations.yaml', 'mental-models.yaml',
+    'episodes.yaml', 'graph.yaml', 'feedback.yaml', 'config.yaml', 'schema.yaml',
+  ].map(file => path.join(basePath, file))
+
+  const chunkDir = path.join(basePath, 'engrams.d')
+  if (fs.existsSync(chunkDir)) {
+    for (const name of fs.readdirSync(chunkDir)) {
+      if (name.endsWith('.yaml')) files.push(path.join(chunkDir, name))
+    }
+  }
+  return files
 }
 
 function repairStaleLock(basePath: string, staleLockMs: number): DoctorRepair {
@@ -362,6 +423,32 @@ function repairStaleLock(basePath: string, staleLockMs: number): DoctorRepair {
     }
   } catch (err) {
     return { name: 'stale-lock', status: 'failed', message: 'Failed to inspect/remove lock file', details: [String(err)] }
+  }
+}
+
+function repairSchemaMigrations(store: FlyupMemStore): DoctorRepair {
+  const result = flyupMigrate(store, { dryRun: false })
+  if (!result.ok) {
+    return {
+      name: 'schema-migrations',
+      status: 'failed',
+      message: 'Failed to apply store schema migrations',
+      details: result.steps.flatMap(step => step.details ?? []),
+    }
+  }
+  const changed = result.steps.filter(step => step.status === 'applied' && step.id !== 'backup' && step.id !== 'rollback')
+  if (changed.length === 0) {
+    return {
+      name: 'schema-migrations',
+      status: 'skipped',
+      message: `Store schema already current at v${CURRENT_STORE_SCHEMA_VERSION}`,
+    }
+  }
+  return {
+    name: 'schema-migrations',
+    status: 'repaired',
+    message: `Applied ${changed.length} schema migration step(s)`,
+    details: changed.map(step => `${step.id}: ${step.message}`),
   }
 }
 

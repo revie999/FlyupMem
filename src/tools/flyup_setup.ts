@@ -3,7 +3,9 @@
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as os from 'node:os'
+import * as yaml from 'js-yaml'
 import type { FlyupMemStore } from '../core/store.js'
+import { createStoreSchemaMeta } from './flyup_migrate.js'
 
 export interface SetupResult {
   ok: boolean
@@ -77,6 +79,7 @@ function initYamlFiles(basePath: string, force: boolean): SetupStep[] {
     ['episodes.yaml', '[]'],
     ['graph.yaml', '{ entities: {}, edges: [] }'],
     ['feedback.yaml', '[]'],
+    ['schema.yaml', yaml.dump(createStoreSchemaMeta(), { lineWidth: 120, noRefs: true })],
   ]
 
   const steps: SetupStep[] = []
@@ -93,7 +96,9 @@ function initYamlFiles(basePath: string, force: boolean): SetupStep[] {
       // Use js-yaml for proper formatting
       const content = file === 'graph.yaml'
         ? 'entities: {}\nedges: []\n'
-        : '[]\n'
+        : file === 'schema.yaml'
+          ? defaultContent
+          : '[]\n'
       fs.writeFileSync(fp, content, 'utf-8')
       created++
     } catch (err) {

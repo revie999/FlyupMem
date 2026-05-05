@@ -14,6 +14,7 @@ const TRACKED_FILES = [
   'graph.yaml',
   'feedback.yaml',
   'config.yaml',
+  'schema.yaml',
 ]
 
 const GITIGNORE_RULES = [

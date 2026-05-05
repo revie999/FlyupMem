@@ -11,6 +11,7 @@ import { flyupReflect } from './tools/flyup_reflect.js'
 import { flyupPack } from './tools/flyup_pack.js'
 import { flyupDoctor } from './tools/flyup_doctor.js'
 import { flyupSetup } from './tools/flyup_setup.js'
+import { flyupMigrate } from './tools/flyup_migrate.js'
 import { flyupInspect } from './tools/flyup_inspect.js'
 import { configShow, configSet, configReset, configKeys } from './tools/flyup_config.js'
 import { flyupSyncInit, flyupSyncStatus, flyupSyncPull, flyupSyncPush, flyupSync } from './tools/flyup_sync.js'
@@ -28,6 +29,8 @@ export { flyupDoctor } from './tools/flyup_doctor.js'
 export type { DoctorResult, DoctorCheck, DoctorRepair, DoctorOptions } from './tools/flyup_doctor.js'
 export { flyupSetup } from './tools/flyup_setup.js'
 export type { SetupResult, SetupStep } from './tools/flyup_setup.js'
+export { flyupMigrate, loadStoreSchemaMeta, loadStoreSchemaMetaStrict, createStoreSchemaMeta, missingMigrationIds, CURRENT_STORE_SCHEMA_VERSION } from './tools/flyup_migrate.js'
+export type { MigrateResult, MigrateOptions, MigrationStep, StoreSchemaMeta } from './tools/flyup_migrate.js'
 export { flyupInspect } from './tools/flyup_inspect.js'
 export type { InspectResult, MemoryDetail, RelatedMemory, GraphEdgeInfo, FeedbackSummary } from './tools/flyup_inspect.js'
 export { configShow, configSet, configReset, configKeys } from './tools/flyup_config.js'
@@ -201,6 +204,29 @@ async function main() {
         console.log(`${icon} ${step.name}: ${step.message}`)
       }
       console.log(`\nSetup: ${result.ok ? 'complete ✅' : 'has failures ❌'}`)
+      break
+    }
+
+    case 'migrate': {
+      const apply = args.includes('--apply')
+      const dryRun = args.includes('--dry-run') || !apply
+      if (apply && args.includes('--dry-run')) {
+        console.error('Usage: flyupmem migrate [--dry-run|--apply]')
+        process.exit(1)
+      }
+      console.log(dryRun ? 'Planning FlyupMem store migrations...\n' : 'Applying FlyupMem store migrations...\n')
+      const result = flyupMigrate(store, { dryRun })
+      for (const step of result.steps) {
+        const icon = step.status === 'applied' ? '✅' : step.status === 'pending' ? '⚠️ ' : step.status === 'skipped' ? '⏭️ ' : '❌'
+        console.log(`${icon} ${step.id}: ${step.message}`)
+        if (step.details) {
+          for (const d of step.details) console.log(`   └─ ${d}`)
+        }
+      }
+      console.log(`\nSchema: v${result.currentVersion} -> v${result.targetVersion}`)
+      if (result.backupPath) console.log(`Backup: ${result.backupPath}`)
+      console.log(`Mode: ${dryRun ? 'dry-run (no files changed)' : 'apply'}`)
+      if (!result.ok) process.exit(1)
       break
     }
 
@@ -415,6 +441,7 @@ Usage:
   flyupmem embed-init                        # Pre-load embedding model
   flyupmem doctor [--repair]                 # Deep health check; --repair runs safe repairs
   flyupmem setup [--force]                   # Environment check + store init
+  flyupmem migrate [--dry-run|--apply]       # Upgrade YAML store schema metadata and old fields
   flyupmem inspect <memory-id> [--json]      # Inspect memory detail & activation
   flyupmem checkpoint <label> [summary]      # Record a recovery checkpoint
   flyupmem recover                           # Print recent session/checkpoint context

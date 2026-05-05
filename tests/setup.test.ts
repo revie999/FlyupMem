@@ -30,7 +30,7 @@ describe('flyupSetup', () => {
     // Check all YAML files were created
     const yamlFiles = [
       'engrams.yaml', 'observations.yaml', 'mental-models.yaml',
-      'episodes.yaml', 'graph.yaml', 'feedback.yaml',
+      'episodes.yaml', 'graph.yaml', 'feedback.yaml', 'schema.yaml',
     ]
     for (const file of yamlFiles) {
       expect(fs.existsSync(path.join(tmp, file))).toBe(true)
