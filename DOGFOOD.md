@@ -1,5 +1,31 @@
 # FlyupMem Dogfood Log
 
+### 2026-05-06 — Real Store Conversation Fragment Review Rules ✅ PASS
+
+**背景：**
+- Deep maintenance 已稳定跑通，但真实 store audit 发现 `review --batch` 仍返回 0，同时还有 3 条 active 脏记忆：
+  - `ENG-20260505-001`：`不是能自动获取吗`
+  - `ENG-20260505-002`：`应该砍 scheduler + Observation是什么意思`
+  - `ENG-20260505-003`：statement 末尾混入用户抱怨 `怎么还记住这个`
+
+**新增/修复：**
+- `review` 扩展低上下文对话碎片规则：识别短、general、无 tag、低 confidence 的疑问/反问片段。
+- `review` 扩展畸形提取规则：识别误把用户抱怨尾巴 `怎么还记住这个` 拼入 statement 的 artifact。
+- 保持保守过滤：结构化 workflow/environment/domain/tag 记忆不受影响。
+
+**验证：**
+- TDD RED：新增 `tests/curate.test.ts` 用例后，目标测试按预期失败 2 项。
+- GREEN：实现最小规则后，`npx vitest run tests/curate.test.ts --pool=forks --poolOptions.forks.singleFork=true`：12/12 通过。
+- `npm run build`：通过。
+- 默认 TS 套件（排除 sync/benchmark，single fork）：25 files / 217 tests 通过。
+- Python Hermes plugin boundary：8/8 通过。
+- 真实 store dry-run：`node dist/index.js review --batch --json` 从 0 变为 3，准确命中 `ENG-20260505-001/002/003`。
+
+**安全性：**
+- 本轮真实 store 只执行 dry-run review；未执行 `prune --apply` / `prune --confirm`。
+
+---
+
 ### 2026-05-04 — Real Store Recall Audit + Cross-Layer Curation ✅ PASS
 
 **背景：**

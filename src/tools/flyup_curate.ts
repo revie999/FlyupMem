@@ -86,11 +86,14 @@ const ENGINEERING_FRAGMENT_PATTERNS = [
 const MALFORMED_EXTRACTION_PATTERNS = [
   /记住：.*"\s+"好的[）)]?"?$/,
   /默认端口是\s*7897"\s+"好的[）)]?"?$/,
+  /怎么还记住这个[？?]?$/,
 ]
 
 const CONVERSATIONAL_FRAGMENT_PATTERNS = [
   /^别的账号呢[？?]?$/,
-  /^不是已经.+[？?]$/,
+  /^不是已经.+[？?]?$/,
+  /^不是能自动获取吗[？?]?$/,
+  /^应该.+是什么意思[？?]?$/,
 ]
 
 function sourceText(mem: Memory): string {

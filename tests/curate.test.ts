@@ -127,14 +127,35 @@ describe('flyupCurate', () => {
 
   it('review flags low-context conversational fragments', () => {
     store.addEngram(makeEngram({ id: 'CHAT-FRAG-001', statement: '别的账号呢', confidence: 5, domain: 'general' }))
+    store.addEngram(makeEngram({ id: 'CHAT-FRAG-002', statement: '不是能自动获取吗', confidence: 5, domain: 'general' }))
+    store.addEngram(makeEngram({ id: 'CHAT-FRAG-003', statement: '应该砍 scheduler + Observation是什么意思', confidence: 5, domain: 'general' }))
     store.addEngram(makeEngram({ id: 'CHAT-NORMAL-001', statement: '主人偏好先看 GitHub 远端分支再分析仓库。', confidence: 7, domain: 'workflow', tags: ['github'] }))
     store.save()
 
     const result = flyupReview(store, { batch: true })
 
-    expect(result.items.map(i => i.id)).toContain('CHAT-FRAG-001')
+    expect(result.items.map(i => i.id)).toEqual(expect.arrayContaining(['CHAT-FRAG-001', 'CHAT-FRAG-002', 'CHAT-FRAG-003']))
     expect(result.items.find(i => i.id === 'CHAT-FRAG-001')!.reasons).toContain('low-context conversational fragment')
+    expect(result.items.find(i => i.id === 'CHAT-FRAG-002')!.reasons).toContain('low-context conversational fragment')
+    expect(result.items.find(i => i.id === 'CHAT-FRAG-003')!.reasons).toContain('low-context conversational fragment')
     expect(result.items.map(i => i.id)).not.toContain('CHAT-NORMAL-001')
+  })
+
+  it('review flags extraction artifacts that contain user complaint tails', () => {
+    store.addEngram(makeEngram({
+      id: 'CHAT-ARTIFACT-001',
+      statement: '不要在记忆插件内越俎代庖去处理会话切分。我会记住这个原则，并在后续的工作中遵循它。怎么还记住这个',
+      confidence: 5,
+      domain: 'general',
+    }))
+    store.addEngram(makeEngram({ id: 'CHAT-NORMAL-002', statement: '不要在记忆插件内越俎代庖去处理会话切分。', confidence: 5, domain: 'general' }))
+    store.save()
+
+    const result = flyupReview(store, { batch: true })
+
+    expect(result.items.map(i => i.id)).toContain('CHAT-ARTIFACT-001')
+    expect(result.items.find(i => i.id === 'CHAT-ARTIFACT-001')!.reasons).toContain('malformed extraction artifact')
+    expect(result.items.map(i => i.id)).not.toContain('CHAT-NORMAL-002')
   })
 
   it('review flags malformed extraction artifacts across engrams and observations', () => {

@@ -26,6 +26,9 @@
 - Added Observation incremental upgrade during consolidation:
   - New clusters first try to match existing Observations by same scope/domain plus entity, tag, or text overlap.
   - Matching Observations accumulate new evidence, proof count, tags, entities, activation, confidence, and history instead of creating duplicates.
+- Added curation rules for newly observed low-context conversation fragments:
+  - `review` now flags short general-domain question fragments such as `不是能自动获取吗` and `应该...是什么意思`.
+  - `review` now flags extraction artifacts whose statement accidentally includes the user's complaint tail `怎么还记住这个`.
 - Added safe `doctor --repair` mode:
   - Removes stale `.lock` files only after they exceed the stale threshold.
   - Applies safe store schema migrations.
