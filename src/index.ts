@@ -2,7 +2,8 @@
 // src/index.ts — Entry point + CLI
 
 import { FlyupMemStore } from './core/store.js'
-import { flyupLearn } from './tools/flyup_learn.js'
+import { flyupLearn, flyupLearnEnhanced } from './tools/flyup_learn.js'
+import { createLLMClient } from './enhance/llm-client.js'
 import { flyupRecall, flyupRecallExplain } from './tools/flyup_recall.js'
 import { flyupStatus } from './tools/flyup_status.js'
 import { flyupFeedback } from './tools/flyup_feedback.js'
@@ -24,7 +25,8 @@ export { FlyupMemStore } from './core/store.js'
 export { SQLiteCache } from './core/sqlite-cache.js'
 export type { SQLiteCacheConfig, FTSResult, MetaRow } from './core/sqlite-cache.js'
 export type * from './core/types.js'
-export { flyupLearn, flyupRecall, flyupRecallExplain, flyupStatus, flyupFeedback, flyupMaintain }
+export { flyupLearn, flyupLearnEnhanced, flyupRecall, flyupRecallExplain, flyupStatus, flyupFeedback, flyupMaintain }
+export type { LearnResult, LearnEnhancedOptions, LearnExtractor } from './tools/flyup_learn.js'
 export type { MaintainMode, MaintainOptions, MaintainResult, MaintenanceState } from './tools/flyup_maintain.js'
 export { flyupDoctor } from './tools/flyup_doctor.js'
 export type { DoctorResult, DoctorCheck, DoctorRepair, DoctorOptions } from './tools/flyup_doctor.js'
@@ -82,13 +84,19 @@ async function main() {
 
   switch (command) {
     case 'learn': {
-      const userMsg = args[1]
-      const assistantMsg = args[2] ?? ''
+      const useLLM = args.includes('--llm')
+      const noFallback = args.includes('--no-fallback')
+      const positional = args.slice(1).filter(arg => !arg.startsWith('--'))
+      const userMsg = positional[0]
+      const assistantMsg = positional[1] ?? ''
       if (!userMsg) {
-        console.error('Usage: flyupmem learn "<user message>" ["<assistant message>"]')
+        console.error('Usage: flyupmem learn "<user message>" ["<assistant message>"] [--llm] [--no-fallback]')
         process.exit(1)
       }
-      const result = flyupLearn(userMsg, assistantMsg, store)
+      const llm = useLLM ? createLLMClient() : null
+      const result = useLLM
+        ? await flyupLearnEnhanced(userMsg, assistantMsg, store, { useLLM: true, llm: llm ?? undefined, fallbackToRules: !noFallback })
+        : flyupLearn(userMsg, assistantMsg, store)
       console.log(JSON.stringify(result, null, 2))
       break
     }

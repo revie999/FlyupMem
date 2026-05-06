@@ -29,6 +29,11 @@
 - Added curation rules for newly observed low-context conversation fragments:
   - `review` now flags short general-domain question fragments such as `不是能自动获取吗` and `应该...是什么意思`.
   - `review` now flags extraction artifacts whose statement accidentally includes the user's complaint tail `怎么还记住这个`.
+- Added opt-in LLM extraction for `learn`:
+  - `flyupLearnEnhanced()` can use an injected OpenAI-compatible `LLMClient`, while `flyupLearn()` remains rule-based by default.
+  - CLI supports `flyupmem learn "<user message>" ["<assistant message>"] --llm [--no-fallback]`.
+  - LLM responses are accepted only as JSON arrays and pass schema validation, confidence clamping, entity sanitization, prompt-injection filtering, recalled-memory-context filtering, and secret redaction before dedup/store.
+  - Invalid/empty LLM output, LLM call failures, or missing LLM credentials fall back to rule extraction by default and return structured `errors`/`fallbackUsed` metadata.
 - Added safe `doctor --repair` mode:
   - Removes stale `.lock` files only after they exceed the stale threshold.
   - Applies safe store schema migrations.
