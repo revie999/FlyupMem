@@ -32,8 +32,9 @@
 - Added opt-in LLM extraction for `learn`:
   - `flyupLearnEnhanced()` can use an injected OpenAI-compatible `LLMClient`, while `flyupLearn()` remains rule-based by default.
   - CLI supports `flyupmem learn "<user message>" ["<assistant message>"] --llm [--no-fallback]`.
-  - LLM responses are accepted only as JSON arrays and pass schema validation, confidence clamping, entity sanitization, prompt-injection filtering, recalled-memory-context filtering, and secret redaction before dedup/store.
-  - Invalid/empty LLM output, LLM call failures, or missing LLM credentials fall back to rule extraction by default and return structured `errors`/`fallbackUsed` metadata.
+  - LLM responses are accepted only as JSON arrays and pass schema validation, confidence clamping, entity sanitization, prompt-injection filtering, recalled-memory-context filtering, default secret-bearing candidate rejection, and max-candidate limiting before dedup/store.
+  - LLM calls use a 10s default timeout (`FLYUP_LLM_TIMEOUT_MS`), and accepted candidates are capped to 5 by default with internal overrides clamped to 10.
+  - Invalid/empty LLM output, LLM call failures, timeouts, or missing LLM credentials fall back to rule extraction by default and return structured `errors`/`fallbackUsed` metadata.
 - Added safe `doctor --repair` mode:
   - Removes stale `.lock` files only after they exceed the stale threshold.
   - Applies safe store schema migrations.

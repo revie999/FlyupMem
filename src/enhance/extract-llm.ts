@@ -36,6 +36,13 @@ interface ExtractedFact {
   confidence?: number
 }
 
+export interface LLMExtractionOptions {
+  /** Default 5, clamped to 1..10 to avoid candidate floods. */
+  maxCandidates?: number
+  /** Default true: drop any LLM candidate containing secrets instead of storing redacted facts. */
+  rejectSecretFacts?: boolean
+}
+
 const VALID_TYPES = new Set<MemoryType>(['behavioral', 'terminological', 'procedural', 'architectural'])
 const VALID_POLARITIES = new Set<Polarity>(['do', 'dont', null])
 
@@ -91,17 +98,31 @@ function sanitizeEntities(value: unknown): Array<{ name: string; type: string }>
     .slice(0, 8)
 }
 
-function sanitizeFact(value: unknown): ExtractedFact | null {
+function normalizeMaxCandidates(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 5
+  return Math.max(1, Math.min(10, Math.floor(value)))
+}
+
+function sanitizeFact(value: unknown, rejectSecretFacts = true): ExtractedFact | null {
   if (!value || typeof value !== 'object') return null
   const raw = value as Record<string, unknown>
   const rawStatement = typeof raw.statement === 'string' ? raw.statement.trim() : ''
   if (rawStatement.length < 5 || rawStatement.length > 300) return null
   if (isUnsafeText(rawStatement)) return null
+  if (rejectSecretFacts && containsSecret(rawStatement)) return null
+
+  const rawRationale = typeof raw.rationale === 'string' ? raw.rationale : ''
+  if (rejectSecretFacts && rawRationale && containsSecret(rawRationale)) return null
+  if (rejectSecretFacts && Array.isArray(raw.entities) && raw.entities.some(entity => {
+    if (!entity || typeof entity !== 'object') return false
+    const candidate = entity as Record<string, unknown>
+    return containsSecret(String(candidate.name ?? '')) || containsSecret(String(candidate.type ?? ''))
+  })) return null
 
   const type = VALID_TYPES.has(raw.type as MemoryType) ? raw.type as MemoryType : 'behavioral'
   const polarity = VALID_POLARITIES.has(raw.polarity as Polarity) ? raw.polarity as Polarity : null
   const statement = redactSensitive(rawStatement)
-  const rationale = typeof raw.rationale === 'string' ? redactSensitive(raw.rationale).slice(0, 300) : ''
+  const rationale = rawRationale ? redactSensitive(rawRationale).slice(0, 300) : ''
 
   return {
     statement,
@@ -113,7 +134,12 @@ function sanitizeFact(value: unknown): ExtractedFact | null {
   }
 }
 
-export function parseAndSanitizeLLMFacts(response: string): ExtractedFact[] {
+export function parseAndSanitizeLLMFacts(
+  response: string,
+  options: LLMExtractionOptions = {},
+): ExtractedFact[] {
+  const maxCandidates = normalizeMaxCandidates(options.maxCandidates)
+  const rejectSecretFacts = options.rejectSecretFacts ?? true
   let raw: unknown
   try {
     const cleaned = response.replace(/```json?\s*/g, '').replace(/```\s*/g, '').trim()
@@ -125,10 +151,11 @@ export function parseAndSanitizeLLMFacts(response: string): ExtractedFact[] {
   if (!Array.isArray(raw)) return []
   const facts: ExtractedFact[] = []
   for (const item of raw) {
-    const fact = sanitizeFact(item)
+    const fact = sanitizeFact(item, rejectSecretFacts)
     if (!fact) continue
     if (facts.some(existing => existing.statement === fact.statement)) continue
     facts.push(fact)
+    if (facts.length >= maxCandidates) break
   }
   return facts
 }
@@ -145,6 +172,7 @@ export async function extractEngramsLLM(
   llm: LLMClient,
   existingIds: string[] = [],
   origin: string = 'hermes:telegram',
+  options: LLMExtractionOptions = {},
 ): Promise<Omit<Engram, 'content_hash'>[]> {
   const cleanUserMsg = stripInjectedMemoryContext(userMsg)
   if (!cleanUserMsg) return []
@@ -154,7 +182,7 @@ export async function extractEngramsLLM(
   const prompt = `User: ${safeUserMsg}\nAssistant: ${safeAssistantMsg}`
 
   const response = await llm.complete(prompt, EXTRACT_SYSTEM_PROMPT)
-  const facts = parseAndSanitizeLLMFacts(response)
+  const facts = parseAndSanitizeLLMFacts(response, options)
   if (!facts.length) return []
 
   const now = new Date().toISOString()

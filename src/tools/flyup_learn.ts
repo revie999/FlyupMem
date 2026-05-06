@@ -26,6 +26,10 @@ export interface LearnEnhancedOptions {
   llm?: LLMClient
   origin?: string
   fallbackToRules?: boolean
+  /** LLM extraction default 5, clamped to max 10. */
+  maxLLMCandidates?: number
+  /** Default true: drop secret-bearing LLM candidates instead of storing redacted facts. */
+  rejectSecretFacts?: boolean
 }
 
 function storeCandidates(
@@ -132,7 +136,10 @@ export async function flyupLearnEnhanced(
 
   try {
     const existingIds = store.withWriteLock(() => store.engrams.map(e => e.id))
-    llmCandidates = await extractEngramsLLM(userMsg, assistantMsg, options.llm, existingIds, origin)
+    llmCandidates = await extractEngramsLLM(userMsg, assistantMsg, options.llm, existingIds, origin, {
+      maxCandidates: options.maxLLMCandidates,
+      rejectSecretFacts: options.rejectSecretFacts,
+    })
     if (!llmCandidates.length) errors.push('llm-extraction-empty-or-invalid')
   } catch (err) {
     errors.push(`llm-error: ${err instanceof Error ? err.message : String(err)}`)

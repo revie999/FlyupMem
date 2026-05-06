@@ -1,12 +1,12 @@
 // tests/learn-llm.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { FlyupMemStore } from '../src/core/store.js'
 import { flyupLearn, flyupLearnEnhanced } from '../src/tools/flyup_learn.js'
-import type { LLMClient } from '../src/enhance/llm-client.js'
+import { LLMClient } from '../src/enhance/llm-client.js'
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'flyupmem-learn-llm-'))
@@ -34,6 +34,8 @@ describe('flyupLearnEnhanced LLM extraction safety', () => {
   })
 
   afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
     fs.rmSync(dir, { recursive: true, force: true })
   })
 
@@ -105,18 +107,25 @@ describe('flyupLearnEnhanced LLM extraction safety', () => {
     expect(store.engrams.map(e => e.statement).join('\n')).not.toContain('错误输出不应入库')
   })
 
-  it('redacts secrets from LLM statements and source quotes before storing', async () => {
+  it('rejects secret-bearing LLM facts by default instead of storing redacted facts', async () => {
     const llm = new FakeLLM(JSON.stringify([
       {
-        statement: 'OpenAI API key 是 sk-testsecret1234567890abcdef，需要配置到环境变量。',
+        statement: 'OpenAI API key 是 sk-testsecretvalue1234567890，需要配置到环境变量。',
         type: 'procedural',
         polarity: 'do',
         confidence: 7,
         entities: [],
       },
+      {
+        statement: '主人偏好 LLM extraction 默认拒绝包含密钥的候选事实。',
+        type: 'behavioral',
+        polarity: 'do',
+        confidence: 8,
+        entities: [{ name: 'LLM extraction', type: 'concept' }],
+      },
     ]))
 
-    const result = await flyupLearnEnhanced('我的 OpenAI API key 是 sk-testsecret1234567890abcdef', '收到', store, {
+    const result = await flyupLearnEnhanced('我的 OpenAI API key 是 sk-testsecretvalue1234567890', '收到', store, {
       useLLM: true,
       llm: llm as unknown as LLMClient,
       origin: 'test',
@@ -124,11 +133,74 @@ describe('flyupLearnEnhanced LLM extraction safety', () => {
 
     expect(result.extractor).toBe('llm')
     expect(result.stored).toBe(1)
-    expect(store.engrams[0].statement).toContain('[REDACTED_SECRET]')
-    expect(store.engrams[0].statement).not.toContain('sk-testsecret')
-    expect(store.engrams[0].source.quote).not.toContain('sk-testsecret')
-    expect(store.engrams[0].tags).toContain('redacted')
-    expect(store.engrams[0].domain).toBe('environment/secrets')
+    expect(store.engrams[0].statement).toBe('主人偏好 LLM extraction 默认拒绝包含密钥的候选事实。')
+    expect(store.engrams[0].source.quote).toContain('[REDACTED_SECRET]')
+    expect(JSON.stringify(store.engrams)).not.toContain('sk-testsecretvalue')
+    expect(store.engrams[0].tags).not.toContain('redacted')
+    expect(store.engrams[0].domain).toBe('general')
+  })
+
+  it('limits LLM extraction to five candidates by default', async () => {
+    const facts = Array.from({ length: 12 }, (_, i) => ({
+      statement: `主人偏好 LLM candidate cap 测试事实 ${i + 1}。`,
+      type: 'behavioral',
+      polarity: 'do',
+      confidence: 7,
+      entities: [],
+    }))
+    const llm = new FakeLLM(JSON.stringify(facts))
+
+    const result = await flyupLearnEnhanced('记住多条 LLM facts，但需要限制候选数量。', '好的', store, {
+      useLLM: true,
+      llm: llm as unknown as LLMClient,
+      origin: 'test',
+    })
+
+    expect(result.extractor).toBe('llm')
+    expect(result.extracted).toBe(5)
+    expect(result.stored).toBe(5)
+    expect(store.engrams).toHaveLength(5)
+    expect(store.engrams.map(e => e.statement)).toEqual(facts.slice(0, 5).map(f => f.statement))
+  })
+
+  it('allows max LLM candidates override but clamps it to ten', async () => {
+    const facts = Array.from({ length: 12 }, (_, i) => ({
+      statement: `主人偏好 LLM candidate override 测试事实 ${i + 1}。`,
+      type: 'behavioral',
+      polarity: 'do',
+      confidence: 7,
+      entities: [],
+    }))
+    const llm = new FakeLLM(JSON.stringify(facts))
+
+    const result = await flyupLearnEnhanced('记住多条 LLM facts，但 override 也要有上限。', '好的', store, {
+      useLLM: true,
+      llm: llm as unknown as LLMClient,
+      origin: 'test',
+      maxLLMCandidates: 99,
+    })
+
+    expect(result.extractor).toBe('llm')
+    expect(result.extracted).toBe(10)
+    expect(result.stored).toBe(10)
+    expect(store.engrams).toHaveLength(10)
+  })
+
+  it('aborts LLM chat requests after the configured timeout', async () => {
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('aborted by test')))
+    }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const llm = new LLMClient({
+      baseUrl: 'https://llm.example/v1',
+      apiKey: 'test-key',
+      model: 'test-model',
+      timeoutMs: 1,
+    })
+
+    await expect(llm.complete('hello')).rejects.toThrow(/timed out after 1ms/)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('rejects prompt-injection and recalled-memory artifacts from LLM output', async () => {

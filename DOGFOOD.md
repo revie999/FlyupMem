@@ -8,20 +8,23 @@
 **新增/修复：**
 - 新增 `flyupLearnEnhanced()`：`useLLM + LLMClient` 显式启用 LLM extraction；原 `flyupLearn()` 保持默认 rule-based。
 - CLI 支持 `flyupmem learn "<user message>" ["<assistant message>"] --llm [--no-fallback]`，并修正 flag 解析，避免把 `--llm` 当 assistant message。
-- LLM 输出必须是 JSON array，并经过 schema/type 校验、confidence clamp、entity sanitization、prompt-injection/recalled-memory-context 过滤、secret redaction 后才 dedup/store。
-- LLM JSON 无效、LLM 调用异常、或未配置 LLM key 时，默认 fallback 到规则提取，并在结果里返回 `errors` / `fallbackUsed` / `llmAttempted` 元信息。
+- LLM 输出必须是 JSON array，并经过 schema/type 校验、confidence clamp、entity sanitization、prompt-injection/recalled-memory-context 过滤、secret-bearing candidate reject-by-default 后才 dedup/store。
+- LLM extraction 默认最多接受 5 条候选；内部 override 也会 clamp 到 10，避免候选洪泛污染 store。
+- `LLMClient` 增加 `AbortController` 超时控制，默认 10s，可通过 `FLYUP_LLM_TIMEOUT_MS` 或 `timeoutMs` 覆盖。
+- LLM JSON 无效、LLM 调用异常/超时、或未配置 LLM key 时，默认 fallback 到规则提取，并在结果里返回 `errors` / `fallbackUsed` / `llmAttempted` 元信息。
 
 **验证：**
-- TDD：新增 `tests/learn-llm.test.ts` 覆盖默认 rule path、opt-in LLM path、invalid JSON fallback、secret redaction、prompt-injection/context artifact rejection、LLM throw fallback、无 key fallback、CLI `--llm` flag parsing。
-- 目标测试：`npx vitest run tests/learn-llm.test.ts --pool=forks --poolOptions.forks.singleFork=true`：8/8 通过。
+- TDD：新增 `tests/learn-llm.test.ts` 覆盖默认 rule path、opt-in LLM path、invalid JSON fallback、secret candidate reject-by-default/source quote redaction、max candidates 默认 5/override clamp 10、LLM timeout、prompt-injection/context artifact rejection、LLM throw fallback、无 key fallback、CLI `--llm` flag parsing。
+- 目标测试：`npx vitest run tests/learn-llm.test.ts --pool=forks --poolOptions.forks.singleFork=true`：11/11 通过。
 - `npm run build`：通过。
-- 默认 TS 套件：26 files / 225 tests 通过。
+- 默认 TS 套件：26 files / 228 tests 通过。
 - Python Hermes plugin boundary：8/8 通过。
 - dist CLI temp-store dogfood：先 `migrate --apply`，再 `learn ... --llm` 且 unset LLM keys，确认返回 `errors: ["llm-client-unavailable"]`、`fallbackUsed: true`、成功存储并能 recall；`doctor --json` 除 embedding warning 外全绿。
 
 **安全性：**
 - 本轮 dogfood 使用临时 store，未写入真实 store。
 - `--llm` 无凭据时不会发网络请求；直接结构化报错并回退规则。
+- LLM 返回疑似密钥/API key/token/password 的候选事实会整条拒绝，不保存 `[REDACTED_SECRET]` 版本。
 
 ---
 

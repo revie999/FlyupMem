@@ -56,7 +56,7 @@ flyupmem benchmark --counts 1000,5000,10000 --format markdown --out /tmp/flyupme
 
 `recall` is BM25-only by default. It does not download or initialize the embedding model unless `embedding_enabled` is true. Recall activation updates are write-light by default: `recall_activation_persistence=sqlite` updates the SQLite cache without rewriting large YAML files on every read. Use `flyupmem config set recall_activation_persistence yaml` if you need fully durable ACT-R counters after every recall.
 
-`learn` is rule-based by default. Add `--llm` to opt into OpenAI-compatible LLM extraction using `FLYUP_LLM_API_KEY`/`FLYUP_LLM_BASE_URL`/`FLYUP_LLM_MODEL` (or OpenAI-compatible env vars). LLM output is not stored raw: it must parse as a JSON array and pass schema validation, prompt-injection/recalled-context filtering, and secret redaction. If the LLM client is unavailable or returns unsafe/invalid output, `learn --llm` falls back to rule extraction unless `--no-fallback` is provided.
+`learn` is rule-based by default. Add `--llm` to opt into OpenAI-compatible LLM extraction using `FLYUP_LLM_API_KEY`/`FLYUP_LLM_BASE_URL`/`FLYUP_LLM_MODEL` (or OpenAI-compatible env vars). LLM calls have a default 10s timeout (`FLYUP_LLM_TIMEOUT_MS`), and accepted LLM facts are capped to 5 candidates by default (internal API overrides clamp at 10). LLM output is not stored raw: it must parse as a JSON array and pass schema validation, prompt-injection/recalled-context filtering, entity sanitization, and secret-bearing candidate rejection. If the LLM client is unavailable or returns unsafe/invalid output, `learn --llm` falls back to rule extraction unless `--no-fallback` is provided.
 
 ## Health, Migration, and Repair
 
