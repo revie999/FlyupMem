@@ -5,7 +5,7 @@ import * as path from 'node:path'
 import * as yaml from 'js-yaml'
 import { FlyupMemStore } from '../core/store.js'
 import type { Memory } from '../core/types.js'
-import { isEmbeddingAvailable } from '../search/embed.js'
+import { initEmbedder, isEmbeddingAvailable } from '../search/embed.js'
 import { CURRENT_STORE_SCHEMA_VERSION, flyupMigrate, loadStoreSchemaMetaStrict, missingMigrationIds } from './flyup_migrate.js'
 
 export interface DoctorResult {
@@ -304,7 +304,11 @@ function checkActivationRange(store: FlyupMemStore): DoctorCheck {
 }
 
 async function checkEmbedding(): Promise<DoctorCheck> {
-  const available = await isEmbeddingAvailable()
+  // Attempt to initialize (lazy load) — model is only loaded on first call
+  try {
+    await initEmbedder({ timeoutMs: 10_000, forceRetry: false })
+  } catch { /* swallow timeout/init errors, fall through to warn */ }
+  const available = isEmbeddingAvailable()
   if (available) {
     return { name: 'embedding', status: 'pass', message: 'BGE-small-zh embedding model available' }
   }
