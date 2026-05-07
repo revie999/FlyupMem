@@ -53,8 +53,17 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
     try {
       // ─── Dashboard HTML ───────────────────────────────
       if (route === 'GET /' || route === 'GET /dashboard') {
-        const htmlPath = path.join(import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname), 'dashboard.html')
-        const content = fs.readFileSync(htmlPath, 'utf-8')
+        // Try dist/web first (compiled), then src/web (source)
+        const candidates = [
+          path.join(import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname), 'dashboard.html'),
+          path.join(storePath, '..', 'projects', 'flyupmem', 'src', 'web', 'dashboard.html'),
+          path.join(process.cwd(), 'src', 'web', 'dashboard.html'),
+        ]
+        let content = ''
+        for (const htmlPath of candidates) {
+          try { content = fs.readFileSync(htmlPath, 'utf-8'); break } catch { /* next */ }
+        }
+        if (!content) return error(res, 'dashboard.html not found', 500)
         return html(res, content)
       }
 
