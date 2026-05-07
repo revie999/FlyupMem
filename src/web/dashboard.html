@@ -197,7 +197,7 @@ textarea.edit-field{min-height:60px;resize:vertical}
     <!-- LLM Status Card -->
     <div class="panel" style="margin-bottom:16px">
       <div class="panel-header"><h2>🧠 LLM Status</h2></div>
-      <div class="panel-body" id="llm-status">Loading...</div>
+      <div class="panel-body" id="config-llm-status">Loading...</div>
     </div>
     <!-- Embedding Status Card -->
     <div class="panel" style="margin-bottom:16px">
@@ -766,7 +766,7 @@ async function loadSystemStatus() {
     const d = await res.json();
 
     // LLM Status
-    const llmEl = document.getElementById('llm-status');
+    const llmEl = document.getElementById('config-llm-status');
     if (d.llm) {
       const llm = d.llm;
       const statusIcon = llm.configured ? '✅' : '❌';
@@ -803,7 +803,7 @@ async function loadSystemStatus() {
       embEl.innerHTML = '<span style="color:var(--text-dim)">No embedding info available</span>';
     }
   } catch (err) {
-    document.getElementById('llm-status').innerHTML = '<span style="color:var(--red)">Failed to load status</span>';
+    document.getElementById('config-llm-status').innerHTML = '<span style="color:var(--red)">Failed to load status</span>';
     document.getElementById('embedding-status').innerHTML = '<span style="color:var(--red)">Failed to load status</span>';
   }
 }
