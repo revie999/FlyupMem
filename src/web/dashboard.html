@@ -29,12 +29,17 @@ nav button:hover{border-color:var(--accent)}
 .search-box input{flex:1;padding:8px 12px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:14px;outline:none}
 .search-box input:focus{border-color:var(--accent)}
 .search-box button{padding:8px 16px;background:var(--accent);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}
-.filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
 .filters select{padding:6px 10px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;font-size:13px}
+.filters label{font-size:13px;color:var(--text-dim);display:flex;align-items:center;gap:4px;cursor:pointer}
+.filters label input{accent-color:var(--accent)}
 .memory-list{list-style:none}
-.memory-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
+.memory-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;align-items:flex-start;gap:10px}
 .memory-item:hover{background:rgba(88,166,255,.08)}
 .memory-item:last-child{border-bottom:none}
+.memory-item.selected{background:rgba(88,166,255,.12)}
+.memory-item input[type="checkbox"]{margin-top:4px;accent-color:var(--accent);cursor:pointer}
+.memory-item .content{flex:1;min-width:0}
 .memory-item .title{font-weight:600;font-size:14px;margin-bottom:4px}
 .memory-item .meta{font-size:12px;color:var(--text-dim);display:flex;gap:12px;flex-wrap:wrap}
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
@@ -54,16 +59,47 @@ nav button:hover{border-color:var(--accent)}
 .detail .field{margin-bottom:8px}
 .detail .field .key{color:var(--text-dim);font-size:12px;display:block}
 .detail .field .val{font-size:14px}
-.graph-container{width:100%;height:400px;background:var(--bg);border-radius:8px;position:relative;overflow:hidden}
+.detail .actions{display:flex;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--border)}
+.btn{padding:6px 14px;border:1px solid var(--border);border-radius:6px;cursor:pointer;font-size:13px;background:var(--surface);color:var(--text)}
+.btn:hover{border-color:var(--accent)}
+.btn-accent{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn-danger{background:var(--red);color:#fff;border-color:var(--red)}
+.btn-danger:hover{opacity:.85}
+.edit-field{width:100%;padding:6px 10px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;font-size:13px;font-family:inherit;outline:none}
+.edit-field:focus{border-color:var(--accent)}
+textarea.edit-field{min-height:60px;resize:vertical}
+.batch-bar{display:none;padding:10px 16px;background:rgba(88,166,255,.1);border:1px solid var(--accent);border-radius:6px;margin-bottom:12px;align-items:center;justify-content:space-between}
+.batch-bar.show{display:flex}
+.batch-bar .count{font-size:13px;color:var(--accent);font-weight:600}
+.batch-bar .actions{display:flex;gap:8px}
+.graph-container{width:100%;height:500px;background:var(--bg);border-radius:8px;position:relative;overflow:hidden;cursor:grab}
+.graph-container.dragging{cursor:grabbing}
 .graph-container canvas{width:100%;height:100%}
+.graph-tooltip{display:none;position:absolute;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:12px;pointer-events:none;z-index:10;max-width:200px;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.graph-tooltip.show{display:block}
+.graph-legend{position:absolute;bottom:12px;right:12px;background:rgba(22,27,34,.9);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:11px}
+.graph-legend div{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+.graph-legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.graph-hint{position:absolute;top:12px;right:12px;font-size:11px;color:var(--text-dim);background:rgba(22,27,34,.8);padding:4px 8px;border-radius:4px}
 .config-table{width:100%;border-collapse:collapse}
 .config-table th,.config-table td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);font-size:13px}
 .config-table th{color:var(--text-dim);font-weight:500}
 .config-table input{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:4px 8px;border-radius:4px;font-size:13px;width:200px}
 .config-table button{padding:4px 10px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px}
 .empty{text-align:center;padding:40px;color:var(--text-dim)}
-#page-memories,#page-graph,#page-config{display:none}
-#page-memories.show,#page-graph.show,#page-config.show{display:block}
+#page-memories,#page-graph,#page-models,#page-config{display:none}
+#page-memories.show,#page-graph.show,#page-models.show,#page-config.show{display:block}
+.status-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)}
+.status-row:last-child{border-bottom:none}
+.status-row .key{color:var(--text-dim);font-size:13px;min-width:140px}
+.status-row .val{font-size:14px;flex:1}
+.status-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.status-dot.ok{background:var(--green)}
+.status-dot.err{background:var(--red)}
+.status-dot.warn{background:var(--yellow)}
+.test-result{margin-top:12px;padding:10px 14px;background:var(--bg);border-radius:6px;font-size:13px;font-family:monospace}
+.test-result.ok{border-left:3px solid var(--green)}
+.test-result.err{border-left:3px solid var(--red)}
 </style>
 </head>
 <body>
@@ -72,11 +108,11 @@ nav button:hover{border-color:var(--accent)}
   <nav>
     <button class="active" onclick="showPage('memories')">Memories</button>
     <button onclick="showPage('graph')">Graph</button>
+    <button onclick="showPage('models')">Models</button>
     <button onclick="showPage('config')">Config</button>
   </nav>
 </header>
 <div class="container">
-  <!-- Stats -->
   <div class="stats" id="stats"></div>
 
   <!-- Memories Page -->
@@ -101,6 +137,15 @@ nav button:hover{border-color:var(--accent)}
         <option value="dormant">Dormant</option>
         <option value="retired">Retired</option>
       </select>
+      <label><input type="checkbox" id="select-all" onchange="toggleSelectAll()"> Select All</label>
+    </div>
+    <div class="batch-bar" id="batch-bar">
+      <span class="count" id="batch-count">0 selected</span>
+      <div class="actions">
+        <button class="btn" onclick="batchAction('activate')">Activate</button>
+        <button class="btn" onclick="batchAction('retire')">Retire</button>
+        <button class="btn btn-danger" onclick="batchAction('delete')">Delete</button>
+      </div>
     </div>
     <div class="panel">
       <div class="panel-body">
@@ -115,8 +160,35 @@ nav button:hover{border-color:var(--accent)}
     <div class="panel">
       <div class="panel-header"><h2>Entity Relationship Graph</h2></div>
       <div class="panel-body">
-        <div class="graph-container"><canvas id="graph-canvas"></canvas></div>
+        <div class="graph-container" id="graph-container">
+          <canvas id="graph-canvas"></canvas>
+          <div class="graph-tooltip" id="graph-tooltip"></div>
+          <div class="graph-hint">Scroll to zoom · Drag to pan · Click node for details</div>
+          <div class="graph-legend">
+            <div><span class="dot" style="background:#58a6ff"></span> Tool</div>
+            <div><span class="dot" style="background:#3fb950"></span> Person</div>
+            <div><span class="dot" style="background:#bc8cff"></span> Project</div>
+            <div><span class="dot" style="background:#d29922"></span> Concept</div>
+          </div>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Models Page -->
+  <div id="page-models">
+    <div class="stats" id="model-stats"></div>
+    <div class="panel">
+      <div class="panel-header"><h2>Embedding Model</h2></div>
+      <div class="panel-body" id="embedding-status"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h2>LLM (Enhanced Extraction)</h2></div>
+      <div class="panel-body" id="llm-status"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-header"><h2>Storage</h2></div>
+      <div class="panel-body" id="storage-status"></div>
     </div>
   </div>
 
@@ -139,6 +211,8 @@ nav button:hover{border-color:var(--accent)}
 
 <script>
 const API = '';
+let selectedIds = new Set();
+let graphData = { nodes: [], edges: [] };
 
 // ─── Navigation ─────────────────────────────────────
 function showPage(name) {
@@ -148,6 +222,7 @@ function showPage(name) {
   event.target.classList.add('active');
   if (name === 'graph') loadGraph();
   if (name === 'config') loadConfig();
+  if (name === 'models') loadModels();
 }
 
 // ─── Stats ──────────────────────────────────────────
@@ -166,6 +241,9 @@ async function loadStats() {
 
 // ─── Memories ───────────────────────────────────────
 async function loadMemories() {
+  selectedIds.clear();
+  updateBatchBar();
+  document.getElementById('select-all').checked = false;
   const layer = document.getElementById('filter-layer').value;
   const status = document.getElementById('filter-status').value;
   const res = await fetch(`${API}/api/memories?layer=${layer}&status=${status}&limit=50`);
@@ -178,6 +256,8 @@ async function doSearch() {
   if (!q) return loadMemories();
   const res = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}`);
   const d = await res.json();
+  selectedIds.clear();
+  updateBatchBar();
   renderList(d.results);
 }
 
@@ -189,17 +269,74 @@ function renderList(memories) {
     const layerBadge = `<span class="badge badge-${m.layer}">${layerLabel(m.layer)}</span>`;
     const statusBadge = `<span class="badge badge-${m.status}">${m.status}</span>`;
     const date = (m.temporal?.learned_at ?? m.activation?.last_accessed ?? '').slice(0, 10);
-    return `<li class="memory-item" onclick="showDetail('${m.id}')">
-      <div class="title">${esc(title)}</div>
-      <div class="meta">${layerBadge} ${statusBadge} <span>📅 ${date}</span> ${m.confidence ? `<span>🎯 ${m.confidence}/10</span>` : ''}</div>
+    const checked = selectedIds.has(m.id) ? 'checked' : '';
+    return `<li class="memory-item ${checked ? 'selected' : ''}" data-id="${m.id}">
+      <input type="checkbox" ${checked} onchange="toggleSelect('${m.id}', this.checked)" onclick="event.stopPropagation()">
+      <div class="content" onclick="showDetail('${m.id}')">
+        <div class="title">${esc(title)}</div>
+        <div class="meta">${layerBadge} ${statusBadge} <span>📅 ${date}</span> ${m.confidence ? `<span>🎯 ${m.confidence}/10</span>` : ''}</div>
+      </div>
     </li>`;
   }).join('');
 }
 
+function toggleSelect(id, checked) {
+  if (checked) selectedIds.add(id); else selectedIds.delete(id);
+  const li = document.querySelector(`.memory-item[data-id="${id}"]`);
+  if (li) li.classList.toggle('selected', checked);
+  updateBatchBar();
+}
+
+function toggleSelectAll() {
+  const checked = document.getElementById('select-all').checked;
+  document.querySelectorAll('.memory-item').forEach(li => {
+    const id = li.dataset.id;
+    const cb = li.querySelector('input[type="checkbox"]');
+    if (checked) { selectedIds.add(id); cb.checked = true; li.classList.add('selected'); }
+    else { selectedIds.delete(id); cb.checked = false; li.classList.remove('selected'); }
+  });
+  updateBatchBar();
+}
+
+function updateBatchBar() {
+  const bar = document.getElementById('batch-bar');
+  const count = selectedIds.size;
+  if (count > 0) {
+    bar.classList.add('show');
+    document.getElementById('batch-count').textContent = `${count} selected`;
+  } else {
+    bar.classList.remove('show');
+  }
+}
+
+async function batchAction(action) {
+  if (!selectedIds.size) return;
+  const count = selectedIds.size;
+  if (action === 'delete' && !confirm(`Delete ${count} memories? This cannot be undone.`)) return;
+  if (action === 'retire' && !confirm(`Retire ${count} memories?`)) return;
+
+  const res = await fetch(API + '/api/memories/batch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids: [...selectedIds], action }),
+  });
+  const d = await res.json();
+  if (d.success) {
+    alert(`${d.affected} memories ${action === 'delete' ? 'deleted' : action === 'retire' ? 'retired' : 'activated'}.`);
+    loadMemories();
+    loadStats();
+  }
+}
+
+// ─── Detail / Edit ──────────────────────────────────
 async function showDetail(id) {
   const res = await fetch(`${API}/api/memory?id=${encodeURIComponent(id)}`);
   const d = await res.json();
   const m = d.memory;
+  renderDetail(m, d.currentActivation, d.related, false);
+}
+
+function renderDetail(m, activation, related, editing) {
   const el = document.getElementById('detail');
   const title = m.title || m.statement?.slice(0, 100) || m.id;
 
@@ -207,60 +344,140 @@ async function showDetail(id) {
   if (m.source_observation_ids?.length) extra += `<div class="field"><span class="key">Source Observations</span><div class="val">${m.source_observation_ids.join(', ')}</div></div>`;
   if (m.evidence?.length) extra += `<div class="field"><span class="key">Evidence (${m.evidence.length})</span><div class="val">${m.evidence.map(e => e.quote || e.engram_id).join(' | ')}</div></div>`;
   if (m.associations?.length) extra += `<div class="field"><span class="key">Associations</span><div class="val">${m.associations.map(a => `${a.target} (${a.type}, ${a.weight})`).join(', ')}</div></div>`;
-  if (d.related?.length) extra += `<div class="field"><span class="key">Graph Relations (${d.related.length})</span><div class="val">${d.related.map(r => `${r.target} [${r.type}]`).join(', ')}</div></div>`;
+  if (related?.length) extra += `<div class="field"><span class="key">Graph Relations (${related.length})</span><div class="val">${related.map(r => `${r.target} [${r.type}]`).join(', ')}</div></div>`;
 
-  el.innerHTML = `
-    <div class="back" onclick="this.parentElement.classList.remove('show')">← Back to list</div>
-    <div class="panel"><div class="panel-body">
-      <h3>${esc(title)}</h3>
-      <div class="field"><span class="key">ID</span><div class="val">${m.id}</div></div>
-      <div class="field"><span class="key">Layer / Status</span><div class="val"><span class="badge badge-${m.layer}">${layerLabel(m.layer)}</span> <span class="badge badge-${m.status}">${m.status}</span></div></div>
-      ${m.statement ? `<div class="field"><span class="key">Statement</span><div class="val">${esc(m.statement)}</div></div>` : ''}
-      ${m.rationale ? `<div class="field"><span class="key">Rationale</span><div class="val">${esc(m.rationale)}</div></div>` : ''}
-      <div class="field"><span class="key">Confidence</span><div class="val">${m.confidence ?? '—'}/10 ${d.currentActivation !== null ? `(activation: ${d.currentActivation.toFixed(3)})` : ''}</div></div>
-      <div class="field"><span class="key">Scope / Domain</span><div class="val">${m.scope ?? '—'} / ${m.domain ?? '—'}</div></div>
-      ${m.tags?.length ? `<div class="field"><span class="key">Tags</span><div class="val">${m.tags.join(', ')}</div></div>` : ''}
-      <div class="field"><span class="key">Learned</span><div class="val">${m.temporal?.learned_at ?? '—'}</div></div>
-      ${extra}
-    </div></div>`;
+  if (editing) {
+    el.innerHTML = `
+      <div class="back" onclick="showDetail('${m.id}')">← Cancel</div>
+      <div class="panel"><div class="panel-body">
+        <h3>Edit Memory</h3>
+        <div class="field"><span class="key">ID</span><div class="val">${m.id}</div></div>
+        <div class="field"><span class="key">Layer / Status</span><div class="val"><span class="badge badge-${m.layer}">${layerLabel(m.layer)}</span>
+          <select id="edit-status" class="edit-field" style="width:auto;display:inline-block;margin-left:8px">
+            ${['candidate','active','fading','dormant','retired'].map(s => `<option value="${s}" ${m.status===s?'selected':''}>${s}</option>`).join('')}
+          </select></div></div>
+        ${m.statement !== undefined ? `<div class="field"><span class="key">Statement</span><textarea id="edit-statement" class="edit-field">${esc(m.statement || '')}</textarea></div>` : ''}
+        ${m.title !== undefined ? `<div class="field"><span class="key">Title</span><input id="edit-title" class="edit-field" value="${esc(m.title || '')}"></div>` : ''}
+        ${m.rationale !== undefined ? `<div class="field"><span class="key">Rationale</span><textarea id="edit-rationale" class="edit-field">${esc(m.rationale || '')}</textarea></div>` : ''}
+        <div class="field"><span class="key">Scope</span><input id="edit-scope" class="edit-field" value="${esc(m.scope || '')}"></div>
+        <div class="field"><span class="key">Domain</span><input id="edit-domain" class="edit-field" value="${esc(m.domain || '')}"></div>
+        <div class="field"><span class="key">Tags (comma-separated)</span><input id="edit-tags" class="edit-field" value="${esc((m.tags || []).join(', '))}"></div>
+        <div class="field"><span class="key">Confidence (0-10)</span><input id="edit-confidence" class="edit-field" type="number" min="0" max="10" step="0.5" value="${m.confidence ?? 5}"></div>
+        <div class="actions">
+          <button class="btn btn-accent" onclick="saveMemory('${m.id}')">Save</button>
+          <button class="btn" onclick="showDetail('${m.id}')">Cancel</button>
+          <button class="btn btn-danger" onclick="deleteMemory('${m.id}')" style="margin-left:auto">Delete</button>
+        </div>
+      </div></div>`;
+  } else {
+    el.innerHTML = `
+      <div class="back" onclick="this.parentElement.classList.remove('show')">← Back to list</div>
+      <div class="panel"><div class="panel-body">
+        <h3>${esc(title)}</h3>
+        <div class="field"><span class="key">ID</span><div class="val">${m.id}</div></div>
+        <div class="field"><span class="key">Layer / Status</span><div class="val"><span class="badge badge-${m.layer}">${layerLabel(m.layer)}</span> <span class="badge badge-${m.status}">${m.status}</span></div></div>
+        ${m.statement ? `<div class="field"><span class="key">Statement</span><div class="val">${esc(m.statement)}</div></div>` : ''}
+        ${m.rationale ? `<div class="field"><span class="key">Rationale</span><div class="val">${esc(m.rationale)}</div></div>` : ''}
+        <div class="field"><span class="key">Confidence</span><div class="val">${m.confidence ?? '—'}/10 ${activation !== null ? `(activation: ${activation.toFixed(3)})` : ''}</div></div>
+        <div class="field"><span class="key">Scope / Domain</span><div class="val">${m.scope ?? '—'} / ${m.domain ?? '—'}</div></div>
+        ${m.tags?.length ? `<div class="field"><span class="key">Tags</span><div class="val">${m.tags.join(', ')}</div></div>` : ''}
+        <div class="field"><span class="key">Learned</span><div class="val">${m.temporal?.learned_at ?? '—'}</div></div>
+        ${extra}
+        <div class="actions">
+          <button class="btn btn-accent" onclick="editMemory('${m.id}')">Edit</button>
+          <button class="btn btn-danger" onclick="deleteMemory('${m.id}')" style="margin-left:auto">Delete</button>
+        </div>
+      </div></div>`;
+  }
   el.classList.add('show');
 }
 
-// ─── Graph ──────────────────────────────────────────
+async function editMemory(id) {
+  const res = await fetch(`${API}/api/memory?id=${encodeURIComponent(id)}`);
+  const d = await res.json();
+  renderDetail(d.memory, d.currentActivation, d.related, true);
+}
+
+async function saveMemory(id) {
+  const body = { id };
+  const get = (sel) => { const el = document.getElementById(sel); return el ? el.value : undefined; };
+
+  const statement = get('edit-statement');
+  const title = get('edit-title');
+  const rationale = get('edit-rationale');
+  const scope = get('edit-scope');
+  const domain = get('edit-domain');
+  const tagsStr = get('edit-tags');
+  const confidence = get('edit-confidence');
+  const status = get('edit-status');
+
+  if (statement !== undefined) body.statement = statement;
+  if (title !== undefined) body.title = title;
+  if (rationale !== undefined) body.rationale = rationale;
+  if (scope !== undefined) body.scope = scope;
+  if (domain !== undefined) body.domain = domain;
+  if (tagsStr !== undefined) body.tags = tagsStr.split(',').map(s => s.trim()).filter(Boolean);
+  if (confidence !== undefined) body.confidence = parseFloat(confidence);
+  if (status !== undefined) body.status = status;
+
+  const res = await fetch(API + '/api/memory', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const d = await res.json();
+  if (d.success) {
+    showDetail(id);
+    loadMemories();
+    loadStats();
+  } else {
+    alert('Save failed: ' + (d.error || 'unknown error'));
+  }
+}
+
+async function deleteMemory(id) {
+  if (!confirm('Delete this memory? This cannot be undone.')) return;
+  const res = await fetch(`${API}/api/memory?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const d = await res.json();
+  if (d.success) {
+    document.getElementById('detail').classList.remove('show');
+    loadMemories();
+    loadStats();
+  } else {
+    alert('Delete failed: ' + (d.error || 'unknown error'));
+  }
+}
+
+// ─── Graph (Interactive) ────────────────────────────
+const graphState = {
+  offsetX: 0, offsetY: 0, scale: 1,
+  dragging: false, dragStartX: 0, dragStartY: 0, startOffsetX: 0, startOffsetY: 0,
+  hoveredNode: null, selectedNode: null,
+};
+
 async function loadGraph() {
   const res = await fetch(API + '/api/graph');
   const d = await res.json();
-  drawGraph(d.nodes, d.edges);
+  graphData = d;
+  graphState.offsetX = 0; graphState.offsetY = 0; graphState.scale = 1;
+  graphState.selectedNode = null;
+  computeLayout();
+  drawGraph();
 }
 
-function drawGraph(nodes, edges) {
-  const canvas = document.getElementById('graph-canvas');
-  const ctx = canvas.getContext('2d');
-  const rect = canvas.parentElement.getBoundingClientRect();
-  canvas.width = rect.width * 2;
-  canvas.height = rect.height * 2;
-  ctx.scale(2, 2);
-  const W = rect.width, H = rect.height;
-
-  if (!nodes.length) {
-    ctx.fillStyle = '#8b949e';
-    ctx.font = '14px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('No graph data yet', W / 2, H / 2);
-    return;
-  }
-
-  // Simple force-directed layout
+function computeLayout() {
+  const container = document.getElementById('graph-container');
+  const W = container.clientWidth, H = container.clientHeight;
+  const nodes = graphData.nodes;
   const pos = {};
+
   nodes.forEach((n, i) => {
     const angle = (2 * Math.PI * i) / nodes.length;
     const r = Math.min(W, H) * 0.35;
     pos[n.id] = { x: W / 2 + r * Math.cos(angle), y: H / 2 + r * Math.sin(angle), vx: 0, vy: 0 };
   });
 
-  // Run simulation
   for (let iter = 0; iter < 200; iter++) {
-    // Repulsion
     for (const a of nodes) for (const b of nodes) {
       if (a.id === b.id) continue;
       let dx = pos[a.id].x - pos[b.id].x;
@@ -270,8 +487,7 @@ function drawGraph(nodes, edges) {
       pos[a.id].vx += dx / dist * force;
       pos[a.id].vy += dy / dist * force;
     }
-    // Attraction
-    for (const e of edges) {
+    for (const e of graphData.edges) {
       if (!pos[e.from] || !pos[e.to]) continue;
       let dx = pos[e.to].x - pos[e.from].x;
       let dy = pos[e.to].y - pos[e.from].y;
@@ -282,7 +498,6 @@ function drawGraph(nodes, edges) {
       pos[e.to].vx -= dx / dist * force;
       pos[e.to].vy -= dy / dist * force;
     }
-    // Center gravity
     for (const n of nodes) {
       pos[n.id].vx += (W / 2 - pos[n.id].x) * 0.01;
       pos[n.id].vy += (H / 2 - pos[n.id].y) * 0.01;
@@ -292,35 +507,246 @@ function drawGraph(nodes, edges) {
       pos[n.id].vy *= 0.8;
     }
   }
+  graphData._pos = pos;
+}
+
+function drawGraph() {
+  const canvas = document.getElementById('graph-canvas');
+  const container = document.getElementById('graph-container');
+  const ctx = canvas.getContext('2d');
+  const rect = container.getBoundingClientRect();
+  canvas.width = rect.width * 2;
+  canvas.height = rect.height * 2;
+  ctx.scale(2, 2);
+  const W = rect.width, H = rect.height;
+  const { offsetX, offsetY, scale, hoveredNode, selectedNode } = graphState;
+
+  ctx.clearRect(0, 0, W, H);
+  ctx.save();
+  ctx.translate(offsetX, offsetY);
+  ctx.scale(scale, scale);
+
+  const pos = graphData._pos || {};
+  const nodes = graphData.nodes;
+  const edges = graphData.edges;
+  const colors = { tool: '#58a6ff', person: '#3fb950', project: '#bc8cff', concept: '#d29922' };
+
+  // Determine highlighted edges
+  const highlightEdges = new Set();
+  if (hoveredNode || selectedNode) {
+    const nid = hoveredNode || selectedNode;
+    edges.forEach((e, i) => { if (e.from === nid || e.to === nid) highlightEdges.add(i); });
+  }
 
   // Draw edges
-  ctx.strokeStyle = '#30363d';
-  ctx.lineWidth = 1;
-  for (const e of edges) {
+  for (let i = 0; i < edges.length; i++) {
+    const e = edges[i];
     if (!pos[e.from] || !pos[e.to]) continue;
     ctx.beginPath();
     ctx.moveTo(pos[e.from].x, pos[e.from].y);
     ctx.lineTo(pos[e.to].x, pos[e.to].y);
+    ctx.strokeStyle = highlightEdges.has(i) ? '#58a6ff' : '#30363d';
+    ctx.lineWidth = highlightEdges.has(i) ? 2 : 1;
     ctx.stroke();
   }
 
   // Draw nodes
-  const colors = { tool: '#58a6ff', person: '#3fb950', project: '#bc8cff', concept: '#d29922' };
   for (const n of nodes) {
     const p = pos[n.id];
+    if (!p) continue;
     const r = Math.min(8 + n.count * 2, 20);
+    const isHovered = n.id === hoveredNode;
+    const isSelected = n.id === selectedNode;
+
     ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, r + (isHovered ? 3 : 0), 0, Math.PI * 2);
     ctx.fillStyle = colors[n.type] || '#58a6ff';
+    ctx.globalAlpha = (hoveredNode || selectedNode) && !isHovered && !isSelected && !highlightEdges.size ? 0.3 : 1;
     ctx.fill();
-    ctx.strokeStyle = '#0d1117';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    if (isSelected) { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke(); }
+    else { ctx.strokeStyle = '#0d1117'; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.globalAlpha = 1;
+
     ctx.fillStyle = '#c9d1d9';
     ctx.font = '11px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(n.id, p.x, p.y + r + 14);
   }
+
+  ctx.restore();
+}
+
+function getNodeAtPos(x, y) {
+  const pos = graphData._pos || {};
+  const { offsetX, offsetY, scale } = graphState;
+  const wx = (x - offsetX) / scale;
+  const wy = (y - offsetY) / scale;
+  for (const n of graphData.nodes) {
+    const p = pos[n.id];
+    if (!p) continue;
+    const r = Math.min(8 + n.count * 2, 20);
+    const dx = wx - p.x, dy = wy - p.y;
+    if (dx * dx + dy * dy <= (r + 4) * (r + 4)) return n;
+  }
+  return null;
+}
+
+// Graph event handlers
+(function() {
+  const container = document.getElementById('graph-container');
+  const canvas = document.getElementById('graph-canvas');
+  const tooltip = document.getElementById('graph-tooltip');
+
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const oldScale = graphState.scale;
+    const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+    graphState.scale = Math.max(0.2, Math.min(5, oldScale * factor));
+    // Zoom toward cursor
+    graphState.offsetX = mx - (mx - graphState.offsetX) * (graphState.scale / oldScale);
+    graphState.offsetY = my - (my - graphState.offsetY) * (graphState.scale / oldScale);
+    drawGraph();
+  }, { passive: false });
+
+  canvas.addEventListener('mousedown', (e) => {
+    graphState.dragging = true;
+    graphState.dragStartX = e.clientX;
+    graphState.dragStartY = e.clientY;
+    graphState.startOffsetX = graphState.offsetX;
+    graphState.startOffsetY = graphState.offsetY;
+    container.classList.add('dragging');
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+
+    if (graphState.dragging) {
+      graphState.offsetX = graphState.startOffsetX + (e.clientX - graphState.dragStartX);
+      graphState.offsetY = graphState.startOffsetY + (e.clientY - graphState.dragStartY);
+      drawGraph();
+      return;
+    }
+
+    // Hover detection
+    const node = getNodeAtPos(mx, my);
+    if (node) {
+      graphState.hoveredNode = node.id;
+      tooltip.className = 'graph-tooltip show';
+      tooltip.innerHTML = `<strong>${esc(node.id)}</strong><br>Type: ${node.type}<br>Memories: ${node.count}`;
+      tooltip.style.left = (mx + 16) + 'px';
+      tooltip.style.top = (my - 10) + 'px';
+    } else {
+      graphState.hoveredNode = null;
+      tooltip.className = 'graph-tooltip';
+    }
+    drawGraph();
+  });
+
+  window.addEventListener('mouseup', () => {
+    graphState.dragging = false;
+    container.classList.remove('dragging');
+  });
+
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const node = getNodeAtPos(mx, my);
+    if (node) {
+      graphState.selectedNode = graphState.selectedNode === node.id ? null : node.id;
+      drawGraph();
+    }
+  });
+})();
+
+// ─── Models ────────────────────────────────────────
+async function loadModels() {
+  const res = await fetch(API + '/api/models');
+  const d = await res.json();
+
+  // Embedding status
+  const emb = d.embedding || {};
+  document.getElementById('embedding-status').innerHTML = `
+    <div class="status-row"><span class="key">Model</span><span class="val">${esc(emb.model || '—')}</span></div>
+    <div class="status-row"><span class="key">Status</span><span class="val"><span class="status-dot ${emb.available ? 'ok' : 'err'}"></span>${emb.available ? 'Available' : 'Not loaded'}</span></div>
+    <div class="status-row"><span class="key">Type</span><span class="val">${esc(emb.type || '—')}</span></div>
+    <div class="status-row"><span class="key">Runtime</span><span class="val">${esc(emb.runtime || '—')}</span></div>
+    <div class="status-row"><span class="key">Dimension</span><span class="val">${emb.dimension ?? '—'}</span></div>
+    <div style="margin-top:12px">
+      <button class="btn btn-accent" onclick="testEmbedding()" id="btn-test-emb">Test Embedding</button>
+      <span id="emb-test-result"></span>
+    </div>`;
+
+  // LLM status
+  const llm = d.llm || {};
+  const llmOk = llm.configured;
+  document.getElementById('llm-status').innerHTML = `
+    <div class="status-row"><span class="key">Status</span><span class="val"><span class="status-dot ${llmOk ? 'ok' : 'warn'}"></span>${llmOk ? 'Configured' : 'Not configured (fallback to rules)'}</span></div>
+    <div class="status-row"><span class="key">Base URL</span><span class="val">${esc(llm.baseUrl || '—')}</span></div>
+    <div class="status-row"><span class="key">Model</span><span class="val">${esc(llm.model || '—')}</span></div>
+    <div class="status-row"><span class="key">API Key</span><span class="val">${llm.hasApiKey ? '✅ Set' : '❌ Not set'}</span></div>
+    <div class="status-row"><span class="key">Env Vars</span><span class="val" style="font-size:12px;color:var(--text-dim)">${(llm.envVars || []).join(', ')}</span></div>
+    <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-accent" onclick="testLLM()" id="btn-test-llm">Test LLM</button>
+      <span id="llm-test-result"></span>
+    </div>`;
+
+  // Storage status
+  const st = d.storage || {};
+  document.getElementById('storage-status').innerHTML = `
+    <div class="status-row"><span class="key">Store Path</span><span class="val" style="font-size:12px;font-family:monospace">${esc(st.storePath || '—')}</span></div>
+    <div class="status-row"><span class="key">Engrams</span><span class="val">${st.engrams ?? '—'}</span></div>
+    <div class="status-row"><span class="key">Observations</span><span class="val">${st.observations ?? '—'}</span></div>
+    <div class="status-row"><span class="key">Mental Models</span><span class="val">${st.mentalModels ?? '—'}</span></div>
+    <div class="status-row"><span class="key">SQLite Cache</span><span class="val"><span class="status-dot ${st.sqliteEnabled ? 'ok' : 'warn'}"></span>${st.sqliteEnabled ? 'Enabled' : 'Disabled'}</span></div>`;
+}
+
+async function testEmbedding() {
+  const btn = document.getElementById('btn-test-emb');
+  const el = document.getElementById('emb-test-result');
+  btn.disabled = true; btn.textContent = 'Testing...';
+  el.innerHTML = '';
+  try {
+    const res = await fetch(API + '/api/models/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: 'embedding' }),
+    });
+    const d = await res.json();
+    if (d.success) {
+      el.innerHTML = `<span class="test-result ok">✅ OK — ${d.elapsed_ms}ms, dim=${d.dimension}, sample=[${d.sample.join(', ')}]</span>`;
+    } else {
+      el.innerHTML = `<span class="test-result err">❌ ${esc(d.error)}</span>`;
+    }
+  } catch (e) {
+    el.innerHTML = `<span class="test-result err">❌ ${esc(e.message)}</span>`;
+  }
+  btn.disabled = false; btn.textContent = 'Test Embedding';
+}
+
+async function testLLM() {
+  const btn = document.getElementById('btn-test-llm');
+  const el = document.getElementById('llm-test-result');
+  btn.disabled = true; btn.textContent = 'Testing...';
+  el.innerHTML = '';
+  try {
+    const res = await fetch(API + '/api/models/test', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: 'llm' }),
+    });
+    const d = await res.json();
+    if (d.success) {
+      el.innerHTML = `<span class="test-result ok">✅ OK — ${d.elapsed_ms}ms, model=${esc(d.model)}</span>`;
+    } else {
+      el.innerHTML = `<span class="test-result err">❌ ${esc(d.error)}</span>`;
+    }
+  } catch (e) {
+    el.innerHTML = `<span class="test-result err">❌ ${esc(e.message)}</span>`;
+  }
+  btn.disabled = false; btn.textContent = 'Test LLM';
 }
 
 // ─── Config ─────────────────────────────────────────
@@ -332,20 +758,23 @@ async function loadConfig() {
     const val = d.config[k.key] ?? '';
     return `<tr>
       <td><strong>${k.key}</strong><br><span style="color:var(--text-dim);font-size:11px">${k.description}</span></td>
-      <td><input id="cfg-${k.key}" value="${esc(String(val))}"></td>
-      <td>${k.type}${k.values ? ' [' + k.values.join('/') + ']' : ''}</td>
-      <td><button onclick="saveConfig('${k.key}')">Save</button></td>
+      <td><input value="${esc(String(val))}" data-key="${k.key}"></td>
+      <td style="color:var(--text-dim)">${k.type}</td>
+      <td><button onclick="saveConfig('${k.key}', this)">Save</button></td>
     </tr>`;
   }).join('');
 }
 
-async function saveConfig(key) {
-  const val = document.getElementById('cfg-' + key).value;
-  await fetch(API + '/api/config', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value: val }),
+async function saveConfig(key, btn) {
+  const input = btn.closest('tr').querySelector('input');
+  const res = await fetch(API + '/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key, value: input.value }),
   });
-  loadConfig();
+  const d = await res.json();
+  btn.textContent = d.success ? '✓' : '✗';
+  setTimeout(() => btn.textContent = 'Save', 1500);
 }
 
 async function resetConfig() {
@@ -355,10 +784,8 @@ async function resetConfig() {
 }
 
 // ─── Helpers ────────────────────────────────────────
-function layerLabel(l) {
-  return { raw: 'Engram', observation: 'Obs', mental_model: 'MM', experience: 'Exp' }[l] || l;
-}
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function layerLabel(l) { return { raw: 'Engram', observation: 'Observation', mental_model: 'Mental Model', experience: 'Experience' }[l] || l; }
 
 // ─── Init ───────────────────────────────────────────
 loadStats();

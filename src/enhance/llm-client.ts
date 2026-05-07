@@ -1,5 +1,9 @@
 // src/enhance/llm-client.ts — LLM client abstraction (OpenAI-compatible)
 
+import * as fs from 'fs'
+import * as path from 'path'
+import * as yaml from 'js-yaml'
+
 export interface LLMConfig {
   baseUrl: string    // e.g. https://api.openai.com/v1
   apiKey: string
@@ -100,25 +104,61 @@ export class LLMClient {
 }
 
 /**
- * Create LLM client from environment variables or config.
+ * Read LLM config from ~/.flyupmem/config.yaml
+ */
+function readLLMConfigFromFile(): Partial<LLMConfig> | null {
+  try {
+    const homeDir = process.env.HOME || process.env.USERPROFILE || ''
+    const configPath = path.join(homeDir, '.flyupmem', 'config.yaml')
+    if (!fs.existsSync(configPath)) return null
+
+    const content = fs.readFileSync(configPath, 'utf8')
+    const config = yaml.load(content) as any
+    if (!config?.llm) return null
+
+    const llm = config.llm
+    return {
+      baseUrl: llm.base_url,
+      apiKey: llm.api_key,
+      model: llm.model,
+      timeoutMs: llm.timeout_ms,
+      maxTokens: llm.max_tokens,
+      temperature: llm.temperature,
+    }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Create LLM client from environment variables, config.yaml, or overrides.
  */
 export function createLLMClient(overrides?: Partial<LLMConfig>): LLMClient | null {
+  const fileConfig = readLLMConfigFromFile() ?? {}
+
   const baseUrl = overrides?.baseUrl
     ?? process.env.FLYUP_LLM_BASE_URL
     ?? process.env.OPENAI_BASE_URL
+    ?? fileConfig.baseUrl
     ?? 'https://api.openai.com/v1'
 
   const apiKey = overrides?.apiKey
     ?? process.env.FLYUP_LLM_API_KEY
     ?? process.env.OPENAI_API_KEY
+    ?? fileConfig.apiKey
     ?? ''
 
   const model = overrides?.model
     ?? process.env.FLYUP_LLM_MODEL
+    ?? fileConfig.model
     ?? 'gpt-4o-mini'
 
   const envTimeoutMs = Number(process.env.FLYUP_LLM_TIMEOUT_MS)
-  const timeoutMs = normalizeTimeoutMs(overrides?.timeoutMs ?? (Number.isFinite(envTimeoutMs) ? envTimeoutMs : undefined))
+  const timeoutMs = normalizeTimeoutMs(
+    overrides?.timeoutMs
+    ?? (Number.isFinite(envTimeoutMs) ? envTimeoutMs : undefined)
+    ?? fileConfig.timeoutMs,
+  )
 
   if (!apiKey) return null
 
