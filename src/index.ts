@@ -68,6 +68,7 @@ export { FlyupMemPlugin, createFlyupMemPlugin } from './plugins/openclaw.js'
 export type { OpenClawPluginConfig, AssembleContext, TurnContext } from './plugins/openclaw.js'
 export { createServer, startMcpServer } from './mcp/server.js'
 export { flyupReflect } from './tools/flyup_reflect.js'
+export { flyupDashboard } from './tools/flyup_dashboard.js'
 export { flyupPack } from './tools/flyup_pack.js'
 export type { StatusResult } from './tools/flyup_status.js'
 export { LLMClient, createLLMClient } from './enhance/llm-client.js'
@@ -455,6 +456,25 @@ async function main() {
       break
     }
 
+    case 'dashboard': {
+      const portIdx = args.indexOf('--port')
+      const hostIdx = args.indexOf('--host')
+      const port = portIdx >= 0 ? parseInt(args[portIdx + 1], 10) : 7860
+      const host = hostIdx >= 0 ? args[hostIdx + 1] : '127.0.0.1'
+      const { flyupDashboard } = await import('./tools/flyup_dashboard.js')
+      const result = await flyupDashboard({ port, host, storePath: store.basePath })
+      if (result.success) {
+        console.log(`🔮 FlyupMem Dashboard running at ${result.url}`)
+        console.log('   Press Ctrl+C to stop')
+        // Keep process alive
+        await new Promise(() => {})
+      } else {
+        console.error(`Failed to start dashboard: ${result.error}`)
+        process.exit(1)
+      }
+      break
+    }
+
     default:
       console.log(`FlyupMem v0.5.1 — Local-first memory for AI agents
 
@@ -488,6 +508,7 @@ Usage:
   flyupmem sync push                         # Commit YAML/config changes + push
   flyupmem sync                              # Pull then push
   flyupmem benchmark [--counts 1000,5000,10000] [--format json|markdown] [--out file]
+  flyupmem dashboard [--port N] [--host H]     # Start Web Dashboard
 
 Environment:
   FLYUP_LLM_API_KEY     LLM API key (for reflect/LLM extraction)
