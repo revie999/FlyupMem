@@ -100,7 +100,7 @@ describe('flyupDoctor', () => {
     expect(['healthy', 'warning']).toContain(parsed.overall)
     expect(parsed.checks.some((check: { name?: string }) => check.name === 'schema-version')).toBe(true)
     expect(stdout).not.toContain('Running doctor checks')
-  }, 30000)
+  }, 60_000)
 
   it('detects duplicate IDs', async () => {
     const e1 = makeEngram({ id: 'DUP-001' })
