@@ -165,7 +165,7 @@ describe('flyupMigrate', () => {
     const check = future.checks.find(c => c.name === 'schema-version')!
     expect(check.status).toBe('warn')
     expect(check.message).toContain('newer')
-  })
+  }, 30_000)
 
   it('doctor fails invalid schema.yaml instead of treating it as v0', async () => {
     fs.mkdirSync(tmp, { recursive: true })
@@ -176,7 +176,7 @@ describe('flyupMigrate', () => {
     const check = result.checks.find(c => c.name === 'schema-version')!
     expect(check.status).toBe('fail')
     expect(result.overall).toBe('error')
-  })
+  }, 30_000)
 
   it('does not migrate or doctor-repair stores from a future schema version', async () => {
     fs.mkdirSync(tmp, { recursive: true })

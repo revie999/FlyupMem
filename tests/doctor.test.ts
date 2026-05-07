@@ -88,7 +88,7 @@ describe('flyupDoctor', () => {
     expect(names).toContain('embedding')
     expect(names).toContain('file-size')
     expect(names).toContain('hermes-plugin')
-  })
+  }, 30_000)
 
   it('CLI doctor --json prints machine-readable diagnostics', () => {
     store.load()

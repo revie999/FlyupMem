@@ -1,4 +1,4 @@
-// src/search/embed.ts — Embedding computation via BGE-small-zh ONNX with SQLite cache
+// src/search/embed.ts — Embedding computation via BGE-m3 ONNX with SQLite cache
 
 import type { SQLiteCache } from '../core/sqlite-cache.js'
 
@@ -8,9 +8,9 @@ let modelReady = false
 let modelLoading = false
 let nextRetryAt = 0
 
-const MODEL_NAME = 'Xenova/bge-small-zh-v1.5'
-const DIMENSION = 512 // BGE-small-zh output dimension
-const DEFAULT_INIT_TIMEOUT_MS = 5_000
+const MODEL_NAME = 'Xenova/bge-m3'
+const DIMENSION = 1024 // BGE-m3 output dimension
+const DEFAULT_INIT_TIMEOUT_MS = 15_000
 const FAILED_RETRY_COOLDOWN_MS = 60_000
 
 export interface InitEmbedderOptions {
@@ -91,12 +91,14 @@ export async function embed(text: string, cache?: SQLiteCache, cacheKey?: string
   if (cache?.isAvailable) {
     const cached = cache.vecGet(key)
     if (cached) {
-      return bufferToFloat32(cached)
+      const vec = bufferToFloat32(cached)
+      // Dimension mismatch (e.g. old 512-dim cache after model upgrade) — recompute
+      if (vec.length === DIMENSION) return vec
     }
   }
 
   try {
-    const output = await embedder(text, { pooling: 'mean', normalize: true })
+    const output = await embedder(text, { pooling: 'cls', normalize: true })
     const data = output.data as Float32Array
     const vec = new Float32Array(data)
 
@@ -127,8 +129,12 @@ export async function embedBatch(
     if (cache?.isAvailable) {
       const cached = cache.vecGet(item.cacheKey)
       if (cached) {
-        results.set(item.cacheKey, bufferToFloat32(cached))
-        continue
+        const vec = bufferToFloat32(cached)
+        if (vec.length === DIMENSION) {
+          results.set(item.cacheKey, vec)
+          continue
+        }
+        // Dimension mismatch — treat as cache miss, will recompute below
       }
     }
     toCompute.push(item)
@@ -141,7 +147,7 @@ export async function embedBatch(
 
   for (const item of toCompute) {
     try {
-      const output = await embedder(item.text, { pooling: 'mean', normalize: true })
+      const output = await embedder(item.text, { pooling: 'cls', normalize: true })
       const vec = new Float32Array(output.data as Float32Array)
       results.set(item.cacheKey, vec)
 
