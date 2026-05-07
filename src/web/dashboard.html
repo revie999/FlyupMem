@@ -184,7 +184,7 @@ textarea.edit-field{min-height:60px;resize:vertical}
     </div>
     <div class="panel">
       <div class="panel-header"><h2>LLM (Enhanced Extraction)</h2></div>
-      <div class="panel-body" id="llm-status"></div>
+      <div class="panel-body" id="models-llm-status"></div>
     </div>
     <div class="panel">
       <div class="panel-header"><h2>Storage</h2></div>
@@ -692,16 +692,29 @@ async function loadModels() {
   // LLM status
   const llm = d.llm || {};
   const llmOk = llm.configured;
-  document.getElementById('llm-status').innerHTML = `
-    <div class="status-row"><span class="key">Status</span><span class="val"><span class="status-dot ${llmOk ? 'ok' : 'warn'}"></span>${llmOk ? 'Configured' : 'Not configured (fallback to rules)'}</span></div>
-    <div class="status-row"><span class="key">Base URL</span><span class="val">${esc(llm.baseUrl || '—')}</span></div>
-    <div class="status-row"><span class="key">Model</span><span class="val">${esc(llm.model || '—')}</span></div>
-    <div class="status-row"><span class="key">API Key</span><span class="val">${llm.hasApiKey ? '✅ Set' : '❌ Not set'}</span></div>
-    <div class="status-row"><span class="key">Env Vars</span><span class="val" style="font-size:12px;color:var(--text-dim)">${(llm.envVars || []).join(', ')}</span></div>
+document.getElementById('models-llm-status').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
+      <div><span style="color:var(--text-dim)">Status:</span> ${llmOk ? '✅ Ready' : '❌ Not configured'}</div>
+      <div><span style="color:var(--text-dim)">API Key:</span> ${llm.hasApiKey ? '✅ Configured' : '❌ Not set'}</div>
+      <div><span style="color:var(--text-dim)">Model:</span> <code>${esc(llm.model || '—')}</code></div>
+      <div><span style="color:var(--text-dim)">Base URL:</span> <code style="font-size:11px">${esc(llm.baseUrl || '—')}</code></div>
+      <div><span style="color:var(--text-dim)">Source:</span> ${llm.source === 'config.yaml' ? '📁 config.yaml' : llm.source === 'env' ? '🔧 Environment' : '—'}</div>
+      <div><span style="color:var(--text-dim)">Env Vars:</span> <code style="font-size:11px">${(llm.envVars || []).join(', ')}</code></div>
+    </div>
     <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
       <button class="btn btn-accent" onclick="testLLM()" id="btn-test-llm">Test LLM</button>
       <span id="llm-test-result"></span>
     </div>`;
+
+
+
+
+
+
+
+
+
+
 
   // Storage status
   const st = d.storage || {};
