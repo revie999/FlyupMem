@@ -310,7 +310,7 @@ async function checkEmbedding(): Promise<DoctorCheck> {
   } catch { /* swallow timeout/init errors, fall through to warn */ }
   const available = isEmbeddingAvailable()
   if (available) {
-    return { name: 'embedding', status: 'pass', message: 'BGE-small-zh embedding model available' }
+    return { name: 'embedding', status: 'pass', message: 'BGE-m3 embedding model available' }
   }
   return { name: 'embedding', status: 'warn', message: 'Embedding model not loaded (semantic search unavailable)' }
 }
