@@ -4,6 +4,7 @@
 import * as http from 'node:http'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import * as yaml from 'js-yaml'
 import { FlyupMemStore } from '../core/store.js'
 import { configShow, configSet, configReset, configKeys } from '../tools/flyup_config.js'
 import { computeActivation } from '../lifecycle/decay.js'
@@ -266,15 +267,32 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
           result.embedding = { model: 'Xenova/bge-m3', available: false, error: 'Module load failed' }
         }
 
-        // LLM status
+        // LLM status — read from env vars AND config.yaml
         const llmBaseUrl = process.env.FLYUP_LLM_BASE_URL || ''
         const llmModel = process.env.FLYUP_LLM_MODEL || ''
         const llmKey = process.env.FLYUP_LLM_API_KEY || ''
+
+        // Also check config.yaml
+        let fileLlmConfig: any = null
+        try {
+          const configPath = path.join(storePath, 'config.yaml')
+          if (fs.existsSync(configPath)) {
+            const cfg = yaml.load(fs.readFileSync(configPath, 'utf8')) as any
+            fileLlmConfig = cfg?.llm || null
+          }
+        } catch { /* ignore */ }
+
+        const effectiveBaseUrl = llmBaseUrl || fileLlmConfig?.base_url || ''
+        const effectiveModel = llmModel || fileLlmConfig?.model || ''
+        const effectiveKey = llmKey || fileLlmConfig?.api_key || ''
+        const source = llmKey ? 'env' : fileLlmConfig?.api_key ? 'config.yaml' : 'none'
+
         result.llm = {
-          configured: !!(llmBaseUrl || llmKey),
-          baseUrl: llmBaseUrl || '(default: https://api.openai.com/v1)',
-          model: llmModel || '(default: gpt-4o-mini)',
-          hasApiKey: !!llmKey,
+          configured: !!(effectiveBaseUrl || effectiveKey),
+          baseUrl: effectiveBaseUrl || '(default: https://api.openai.com/v1)',
+          model: effectiveModel || '(default: gpt-4o-mini)',
+          hasApiKey: !!effectiveKey,
+          source,
           envVars: ['FLYUP_LLM_BASE_URL', 'FLYUP_LLM_MODEL', 'FLYUP_LLM_API_KEY', 'FLYUP_LLM_TIMEOUT_MS'],
         }
 

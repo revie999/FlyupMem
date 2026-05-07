@@ -194,6 +194,16 @@ textarea.edit-field{min-height:60px;resize:vertical}
 
   <!-- Config Page -->
   <div id="page-config">
+    <!-- LLM Status Card -->
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-header"><h2>🧠 LLM Status</h2></div>
+      <div class="panel-body" id="llm-status">Loading...</div>
+    </div>
+    <!-- Embedding Status Card -->
+    <div class="panel" style="margin-bottom:16px">
+      <div class="panel-header"><h2>📐 Embedding Status</h2></div>
+      <div class="panel-body" id="embedding-status">Loading...</div>
+    </div>
     <div class="panel">
       <div class="panel-header">
         <h2>Configuration</h2>
@@ -221,7 +231,7 @@ function showPage(name) {
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   event.target.classList.add('active');
   if (name === 'graph') loadGraph();
-  if (name === 'config') loadConfig();
+  if (name === 'config') { loadSystemStatus(); loadConfig(); }
   if (name === 'models') loadModels();
 }
 
@@ -750,6 +760,54 @@ async function testLLM() {
 }
 
 // ─── Config ─────────────────────────────────────────
+async function loadSystemStatus() {
+  try {
+    const res = await fetch(API + '/api/status');
+    const d = await res.json();
+
+    // LLM Status
+    const llmEl = document.getElementById('llm-status');
+    if (d.llm) {
+      const llm = d.llm;
+      const statusIcon = llm.configured ? '✅' : '❌';
+      const apiKeyIcon = llm.hasApiKey ? '✅ Configured' : '❌ Not set';
+      const sourceLabel = llm.source === 'config.yaml' ? '📁 config.yaml' : llm.source === 'env' ? '🔧 Environment' : '—';
+      llmEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
+          <div><span style="color:var(--text-dim)">Status:</span> ${statusIcon} ${llm.configured ? 'Ready' : 'Not configured'}</div>
+          <div><span style="color:var(--text-dim)">API Key:</span> ${apiKeyIcon}</div>
+          <div><span style="color:var(--text-dim)">Model:</span> <code>${esc(llm.model)}</code></div>
+          <div><span style="color:var(--text-dim)">Base URL:</span> <code style="font-size:11px">${esc(llm.baseUrl)}</code></div>
+          <div><span style="color:var(--text-dim)">Source:</span> ${sourceLabel}</div>
+          <div><span style="color:var(--text-dim)">Env Vars:</span> <code style="font-size:11px">${llm.envVars.join(', ')}</code></div>
+        </div>
+      `;
+    } else {
+      llmEl.innerHTML = '<span style="color:var(--text-dim)">No LLM info available</span>';
+    }
+
+    // Embedding Status
+    const embEl = document.getElementById('embedding-status');
+    if (d.embedding) {
+      const emb = d.embedding;
+      const statusIcon = emb.available ? '✅' : '❌';
+      embEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
+          <div><span style="color:var(--text-dim)">Status:</span> ${statusIcon} ${emb.available ? 'Ready' : 'Not loaded'}</div>
+          <div><span style="color:var(--text-dim)">Model:</span> <code>${esc(emb.model)}</code></div>
+          <div><span style="color:var(--text-dim)">Dimension:</span> ${emb.dimension || '—'}</div>
+          <div><span style="color:var(--text-dim)">Runtime:</span> ${esc(emb.runtime || emb.type || '—')}</div>
+        </div>
+      `;
+    } else {
+      embEl.innerHTML = '<span style="color:var(--text-dim)">No embedding info available</span>';
+    }
+  } catch (err) {
+    document.getElementById('llm-status').innerHTML = '<span style="color:var(--red)">Failed to load status</span>';
+    document.getElementById('embedding-status').innerHTML = '<span style="color:var(--red)">Failed to load status</span>';
+  }
+}
+
 async function loadConfig() {
   const res = await fetch(API + '/api/config');
   const d = await res.json();
