@@ -1,7 +1,7 @@
 // tests/decay.test.ts
 import { describe, it, expect } from 'vitest'
 import {
-  decayedStrength, reactivate, statusFromStrength,
+  decayedStrength, decayedConfidence, reactivate, statusFromStrength,
   computeActivation, computeQualityScore,
 } from '../src/lifecycle/decay.js'
 import type { Activation } from '../src/core/types.js'
@@ -174,5 +174,48 @@ describe('computeQualityScore', () => {
     )
     expect(best).toBeGreaterThanOrEqual(0)
     expect(best).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('decayedConfidence', () => {
+  it('returns original for 0 days', () => {
+    expect(decayedConfidence(8, 0, 5)).toBe(8)
+  })
+
+  it('decays to ~5 after 90 days with default emotional weight', () => {
+    // confidence 8, half-life 90 days: should be ~4.5 → round to 5
+    const result = decayedConfidence(8, 90, 5)
+    expect(result).toBeGreaterThanOrEqual(4)
+    expect(result).toBeLessThanOrEqual(5)
+  })
+
+  it('decays to ~1 after 360 days (4 half-lives)', () => {
+    // confidence 8, after 4 half-lives with emotional_weight=5
+    // lambda = ln(2)/90 * (1-5/20) = 0.005776; decayed = 1 + 7*exp(-0.005776*360) ≈ 1.875 → round to 2
+    const result = decayedConfidence(8, 360, 5)
+    expect(result).toBe(2)
+  })
+
+  it('never goes below floor of 1', () => {
+    const result = decayedConfidence(10, 10000, 0)
+    expect(result).toBeGreaterThanOrEqual(1)
+  })
+
+  it('higher emotional weight slows decay', () => {
+    const lowWeight = decayedConfidence(8, 90, 1)
+    const highWeight = decayedConfidence(8, 90, 9)
+    expect(highWeight).toBeGreaterThan(lowWeight)
+  })
+
+  it('confidence 1 stays at 1 regardless of time', () => {
+    expect(decayedConfidence(1, 90, 5)).toBe(1)
+    expect(decayedConfidence(1, 365, 5)).toBe(1)
+  })
+
+  it('confidence 10 with high emotional weight decays slowly', () => {
+    // emotional_weight 10 → lambda halved → 90 days ≈ 45 days equivalent
+    const result = decayedConfidence(10, 90, 10)
+    expect(result).toBeGreaterThanOrEqual(7)
+    expect(result).toBeLessThanOrEqual(8)
   })
 })

@@ -2,7 +2,7 @@
 
 import type { Engram, Observation, MentalModel, Status } from '../core/types.js'
 import type { FlyupMemStore } from '../core/store.js'
-import { decayedStrength, statusFromStrength } from './decay.js'
+import { decayedStrength, decayedConfidence, statusFromStrength } from './decay.js'
 
 /**
  * Apply decay to all memories in the store.
@@ -39,6 +39,10 @@ export function batchDecay(store: FlyupMemStore): {
 
     eng.activation.retrieval_strength = newStrength
 
+    // Confidence decay
+    const oldConfidence = eng.confidence ?? 5
+    eng.confidence = decayedConfidence(oldConfidence, daysSince, eng.emotional_weight ?? 5)
+
     if (newStatus !== oldStatus) {
       eng.status = newStatus
       statusChanges.push({ id: eng.id, from: oldStatus, to: newStatus })
@@ -69,6 +73,10 @@ export function batchDecay(store: FlyupMemStore): {
 
     obs.activation.retrieval_strength = newStrength
 
+    // Confidence decay
+    const oldObsConfidence = obs.confidence ?? 5
+    obs.confidence = decayedConfidence(oldObsConfidence, daysSince, obs.emotional_weight ?? 5)
+
     if (newStatus !== oldStatus) {
       obs.status = newStatus
       statusChanges.push({ id: obs.id, from: oldStatus, to: newStatus })
@@ -98,6 +106,10 @@ export function batchDecay(store: FlyupMemStore): {
     const newStatus = statusFromStrength(newStrength) as Status
 
     mm.activation.retrieval_strength = newStrength
+
+    // Confidence decay
+    const oldMmConfidence = mm.confidence ?? 8
+    mm.confidence = decayedConfidence(oldMmConfidence, daysSince, mm.emotional_weight ?? 5)
 
     if (newStatus !== oldStatus) {
       mm.status = newStatus

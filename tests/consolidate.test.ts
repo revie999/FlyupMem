@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { findMatchingObservation, hasPolarityConflict, mergeToObservation, updateObservationFromCluster } from '../src/lifecycle/consolidate.js'
+import { findMatchingObservation, hasPolarityConflict, mergeToObservation, updateObservationFromCluster, markAsEvolution } from '../src/lifecycle/consolidate.js'
 import { FlyupMemStore } from '../src/core/store.js'
 import type { Engram } from '../src/core/types.js'
 import { generateId } from '../src/core/id.js'
@@ -176,5 +176,75 @@ describe('Observation incremental upgrade', () => {
     expect(updated.tags).toContain('maintenance')
     expect(updated.trend).toBe('strengthening')
     expect(updated.history.at(-1)?.event).toBe('updated')
+  })
+})
+
+describe('markAsEvolution', () => {
+  let dir: string
+  let store: FlyupMemStore
+
+  beforeEach(() => {
+    dir = tmpDir()
+    store = new FlyupMemStore({ store_path: dir })
+  })
+
+  afterEach(() => {
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('adds semantic associations between conflicting engrams', () => {
+    const engA = makeEngram({ id: 'ENG-A', polarity: 'do', statement: 'Use vitest for testing' })
+    const engB = makeEngram({ id: 'ENG-B', polarity: 'dont', statement: 'Do not use vitest' })
+    store.addEngram(engA)
+    store.addEngram(engB)
+
+    markAsEvolution([engA, engB], store)
+
+    const updatedA = store.engrams.find(e => e.id === 'ENG-A')!
+    const updatedB = store.engrams.find(e => e.id === 'ENG-B')!
+
+    // A should have association to B
+    const assocA = updatedA.associations.find((a: any) => a.target === 'ENG-B')
+    expect(assocA).toBeDefined()
+    expect(assocA.type).toBe('semantic')
+    expect(assocA.weight).toBe(0.5)
+
+    // B should have association to A
+    const assocB = updatedB.associations.find((a: any) => a.target === 'ENG-A')
+    expect(assocB).toBeDefined()
+    expect(assocB.type).toBe('semantic')
+    expect(assocB.weight).toBe(0.5)
+  })
+
+  it('preserves existing associations', () => {
+    const engA = makeEngram({
+      id: 'ENG-A',
+      polarity: 'do',
+      associations: [{ target: 'ENG-EXISTING', type: 'semantic', weight: 0.8 }],
+    })
+    const engB = makeEngram({ id: 'ENG-B', polarity: 'dont' })
+    store.addEngram(engA)
+    store.addEngram(engB)
+
+    markAsEvolution([engA, engB], store)
+
+    const updatedA = store.engrams.find(e => e.id === 'ENG-A')!
+    // Should keep existing association AND add new one
+    expect(updatedA.associations).toHaveLength(2)
+    expect(updatedA.associations.find((a: any) => a.target === 'ENG-EXISTING')).toBeDefined()
+    expect(updatedA.associations.find((a: any) => a.target === 'ENG-B')).toBeDefined()
+  })
+
+  it('does not create self-association', () => {
+    const engA = makeEngram({ id: 'ENG-A', polarity: 'do' })
+    const engB = makeEngram({ id: 'ENG-B', polarity: 'dont' })
+    store.addEngram(engA)
+    store.addEngram(engB)
+
+    markAsEvolution([engA, engB], store)
+
+    const updatedA = store.engrams.find(e => e.id === 'ENG-A')!
+    // Should NOT have self-association
+    expect(updatedA.associations.find((a: any) => a.target === 'ENG-A')).toBeUndefined()
   })
 })

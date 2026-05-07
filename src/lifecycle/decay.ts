@@ -116,3 +116,32 @@ export function daysSince(isoDate: string): number {
   const now = Date.now()
   return Math.max(0, (now - then) / (1000 * 60 * 60 * 24))
 }
+
+// ─── Confidence Decay ────────────────────────────────────────
+
+const CONFIDENCE_HALF_LIFE_DAYS = 90  // 每90天衰减一半
+const CONFIDENCE_LAMBDA = Math.LN2 / CONFIDENCE_HALF_LIFE_DAYS  // ≈ 0.0077
+const CONFIDENCE_FLOOR = 1
+
+/**
+ * Decay confidence over time using exponential decay (half-life = 90 days).
+ *
+ * Emotional weight modulates the effective decay rate:
+ *   - emotional_weight 10 → decay rate halved (memories last 2x longer)
+ *   - emotional_weight 5  → normal decay
+ *   - emotional_weight 0  → decay rate boosted 1.25x (faster fade)
+ *
+ * @param currentConfidence  Current confidence value (1-10)
+ * @param daysSinceAccess    Days since last access
+ * @param emotionalWeight    Emotional weight (1-10), default 5
+ * @returns Decayed confidence, rounded to integer, floored at 1
+ */
+export function decayedConfidence(
+  currentConfidence: number,
+  daysSinceAccess: number,
+  emotionalWeight: number = 5,
+): number {
+  const effectiveLambda = CONFIDENCE_LAMBDA * (1 - emotionalWeight / 20)
+  const decayed = CONFIDENCE_FLOOR + (currentConfidence - CONFIDENCE_FLOOR) * Math.exp(-effectiveLambda * daysSinceAccess)
+  return Math.max(CONFIDENCE_FLOOR, Math.round(decayed))
+}
