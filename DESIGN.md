@@ -71,7 +71,7 @@ L4 Experience    ←── 交互日志，快速衰减
 ├── history.jsonl            # 变更日志
 ├── index.sqlite             # 可选缓存，可重建
 └── embeddings/
-    └── bge-small-zh.cache   # 嵌入缓存
+    └── bge-m3.cache           # 嵌入缓存
 ```
 
 YAML 是 source of truth。SQLite / embedding cache 都是派生物，可随时从 YAML 重建。*(共通)*
@@ -144,7 +144,7 @@ relations:                    # *(v3)*
   conflicts: []
 
 # 嵌入
-embedding_ref: "embeddings/bge-small-zh.cache#ENG-20260430-001"
+embedding_ref: "embeddings/bge-m3.cache#ENG-20260430-001"
 
 # 反馈计数
 feedback:
