@@ -1369,50 +1369,50 @@ recall 含 BM25 + 图谱 + 时序 + activation 加权 + 9 维 rerank；默认 `r
 ## 十四、实现路线图
 
 ### Phase 1 — MVP（1-2 周）
-- [ ] YAML schema 定义 + 原子读写 + 文件锁
-- [ ] Schema 版本号 + 迁移框架
-- [ ] 首次启动初始化（`initFreshStore`）
-- [ ] Engram 学习/候选晋升/检索/退休
-- [ ] 中文分词（jieba）+ BM25 检索
-- [ ] tiktoken 精确 token 计数
-- [ ] BM25 检索 + RRF 融合
-- [ ] ACT-R 分层衰减 + scope 免疫
-- [ ] OpenClaw 插件基础（assemble/afterTurn）
-- [ ] `flyup_learn` / `flyup_recall` / `flyup_status` 工具
-- [ ] 渐进式注入（先做 constraints 单层）
-- [ ] 基础错误处理（YAML 备份回滚、afterTurn try/catch）
-- [ ] 单元测试框架（Vitest）+ 衰减/检索核心测试
+- [x] YAML schema 定义 + 原子读写 + 文件锁
+- [x] Schema 版本号 + 迁移框架
+- [x] 首次启动初始化（`initFreshStore`）
+- [x] Engram 学习/候选晋升/检索/退休
+- [x] 中文分词（jieba）+ BM25 检索
+- [x] tiktoken 精确 token 计数
+- [x] BM25 检索 + RRF 融合
+- [x] ACT-R 分层衰减 + scope 免疫
+- [x] OpenClaw 插件基础（assemble/afterTurn）
+- [x] `flyup_learn` / `flyup_recall` / `flyup_status` 工具
+- [x] 渐进式注入（先做 constraints 单层）
+- [x] 基础错误处理（YAML 备份回滚、afterTurn try/catch）
+- [x] 单元测试框架（Vitest）+ 衰减/检索核心测试
 
 ### Phase 2 — 深度检索（1-2 周）
-- [ ] BGE-small-zh 嵌入 + 语义检索
-- [ ] 图谱扩展检索（entity + semantic + causal + co_accessed）
-- [ ] 时序检索 + BFS 扩散
-- [ ] RRF 多路融合 + ACT-R 激活度加权
-- [ ] 8 维 Local Rerank
-- [ ] Token 预算裁剪 + 3 层注入
-- [ ] SQLite FTS5 缓存
+- [x] BGE-small-zh 嵌入 + 语义检索
+- [x] 图谱扩展检索（entity + semantic + causal + co_accessed）
+- [x] 时序检索 + BFS 扩散
+- [x] RRF 多路融合 + ACT-R 激活度加权
+- [x] 8 维 Local Rerank
+- [x] Token 预算裁剪 + 3 层注入
+- [x] SQLite FTS5 缓存
 
 ### Phase 3 — 跨平台 + 自动维护（1 周）
-- [ ] Hermes MemoryProvider 接口
-- [ ] MCP Server
-- [ ] Observation 自动合并（嵌入聚类 + 证据累积）
-- [ ] 矛盾检测 + 演化标记
-- [ ] 反馈信号处理 + 自动退休
-- [ ] Confidence 90 天衰减
-- [ ] 整合调度（Light / Deep / REM）
-- [ ] graph.yaml 自动维护
+- [x] Hermes MemoryProvider 接口
+- [x] MCP Server
+- [x] Observation 自动合并（嵌入聚类 + 证据累积）
+- [x] 矛盾检测 + 演化标记
+- [x] 反馈信号处理 + 自动退休
+- [x] Confidence 90 天衰减
+- [x] 整合调度（Light / Deep / REM）
+- [x] graph.yaml 自动维护
 
 ### Phase 4 — 增强模式（可选）
-- [ ] LLM 增强提取
-- [ ] Reflect 精简版
-- [ ] Knowledge Pack 导出/导入
+- [x] LLM 增强提取
+- [x] Reflect 精简版
+- [x] Knowledge Pack 导出/导入
 - [x] Git sync（跨机记忆同步）— MVP: init/status/push/pull/sync，YAML 为源，SQLite 为可重建派生缓存
 
 ### Phase 5 — 生产化 *(v3)*
 - [x] doctor / setup / status 命令 — `doctor --repair` 支持安全修复 stale lock、schema migration、SQLite cache、dangling graph refs、Engram chunks；重复 ID/secret 仍只报告不自动删除
 - [x] schema migration framework — `flyupmem migrate [--dry-run|--apply]`，维护 `schema.yaml`，回填旧字段与默认文件，并纳入 doctor/sync
-- [ ] memory inspect UI
-- [ ] 配置面板
+- [x] memory inspect UI
+- [x] 配置面板
 - [x] memory review/prune CLI — 本地记忆质量维护，dry-run 默认，安全退休 dogfood/test marker
 - [x] 性能监控 + 指标 — MVP: `flyupmem benchmark` measures 1K/5K/10K population, YAML save/load, SQLite rebuild, FTS, BM25 fallback, and full recall pipeline
 - [x] write-light recall — 默认 `recall_activation_persistence=sqlite`，recall 只更新 SQLite activation meta，避免每次读取重写大 YAML；可切回 `yaml` 完全持久化
