@@ -1,0 +1,19 @@
+{
+  "name": "flyupmem-openclaw",
+  "version": "0.5.1",
+  "private": true,
+  "description": "OpenClaw plugin for FlyupMem — local-first memory system",
+  "type": "module",
+  "main": "index.js",
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ]
+  },
+  "dependencies": {
+    "typebox": "^1.1.37"
+  },
+  "peerDependencies": {
+    "openclaw": ">=2026.5.0"
+  }
+}

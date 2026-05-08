@@ -1,5 +1,8 @@
 import importlib.util
+import json
+import os
 import sys
+import tempfile
 import time
 import types
 import unittest
@@ -143,10 +146,74 @@ class HermesPluginBoundaryTest(unittest.TestCase):
 
     def test_flyup_recall_explain_invokes_cli_flag(self):
         provider = RecordingProvider()
-
         provider.handle_tool_call("flyup_recall", {"query": "marker", "explain": True})
 
         self.assertEqual(provider.calls[0], ("recall", "marker", "--explain"))
+
+    def test_provider_has_explicit_register_entrypoint(self):
+        collector = types.SimpleNamespace(provider=None)
+        collector.register_memory_provider = lambda provider: setattr(collector, "provider", provider)
+
+        plugin.register(collector)
+
+        self.assertIsInstance(collector.provider, plugin.FlyupMemProvider)
+
+    def test_schema_includes_maintain_and_reflect_tools(self):
+        provider = RecordingProvider()
+        tool_names = {schema["name"] for schema in provider.get_tool_schemas()}
+
+        self.assertIn("flyup_maintain", tool_names)
+        self.assertIn("flyup_reflect", tool_names)
+
+    def test_maintain_and_reflect_invoke_cli(self):
+        provider = RecordingProvider()
+
+        provider.handle_tool_call("flyup_maintain", {"mode": "deep"})
+        provider.handle_tool_call("flyup_reflect", {"query": "Hermes adapter"})
+
+        self.assertEqual(provider.calls[0], ("maintain", "--mode", "deep"))
+        self.assertEqual(provider.calls[1], ("reflect", "Hermes adapter"))
+
+    def test_initialize_reads_provider_config_with_env_override(self):
+        old_store_path = os.environ.pop("FLYUPMEM_STORE_PATH", None)
+        old_token_budget = os.environ.pop("FLYUPMEM_TOKEN_BUDGET", None)
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                Path(tmpdir, "flyupmem.json").write_text(json.dumps({
+                    "store_path": "~/configured-flyupmem-store",
+                    "token_budget": "1234",
+                }))
+                provider = RecordingProvider()
+                provider.initialize("session", hermes_home=tmpdir)
+
+                self.assertEqual(provider._store_path, str(Path("~/configured-flyupmem-store").expanduser()))
+                self.assertEqual(provider._token_budget, 1234)
+
+                os.environ["FLYUPMEM_STORE_PATH"] = "~/env-flyupmem-store"
+                os.environ["FLYUPMEM_TOKEN_BUDGET"] = "4321"
+                provider = RecordingProvider()
+                provider.initialize("session", hermes_home=tmpdir)
+
+                self.assertEqual(provider._store_path, str(Path("~/env-flyupmem-store").expanduser()))
+                self.assertEqual(provider._token_budget, 4321)
+        finally:
+            if old_store_path is None:
+                os.environ.pop("FLYUPMEM_STORE_PATH", None)
+            else:
+                os.environ["FLYUPMEM_STORE_PATH"] = old_store_path
+            if old_token_budget is None:
+                os.environ.pop("FLYUPMEM_TOKEN_BUDGET", None)
+            else:
+                os.environ["FLYUPMEM_TOKEN_BUDGET"] = old_token_budget
+
+    def test_save_config_writes_provider_config_file(self):
+        provider = RecordingProvider()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            provider.save_config({"store_path": "~/saved-store", "token_budget": "777"}, tmpdir)
+            written = json.loads(Path(tmpdir, "flyupmem.json").read_text())
+
+        self.assertEqual(written["store_path"], "~/saved-store")
+        self.assertEqual(written["token_budget"], "777")
 
 
 if __name__ == "__main__":

@@ -6,9 +6,10 @@ ACT-R decay, and automatic maintenance.
 Uses the FlyupMem CLI (`flyupmem`) via subprocess for all operations.
 Shares the same `~/.flyupmem/` storage as the MCP server and OpenClaw plugin.
 
-Config via environment variables:
-  FLYUPMEM_STORE_PATH    — custom store path (default: ~/.flyupmem)
-  FLYUPMEM_TOKEN_BUDGET  — injection token budget (default: 2048)
+Config priority:
+  1. Environment variables: FLYUPMEM_STORE_PATH / FLYUPMEM_TOKEN_BUDGET
+  2. Hermes provider config: $HERMES_HOME/flyupmem.json
+  3. Defaults: ~/.flyupmem / 2048
 """
 
 from __future__ import annotations
@@ -92,6 +93,12 @@ def has_auto_learn_signal(text: str) -> bool:
     return any(marker in normalized for marker in AUTO_LEARN_MARKERS)
 
 
+def _expand_path(value: Any) -> Optional[str]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return str(Path(value).expanduser())
+
+
 class FlyupMemProvider(MemoryProvider):
     """Hermes MemoryProvider backed by FlyupMem CLI."""
 
@@ -107,8 +114,19 @@ class FlyupMemProvider(MemoryProvider):
         """Initialize for a session."""
         self._session_id = session_id
         self._hermes_home = kwargs.get("hermes_home", str(Path.home() / ".hermes"))
-        self._store_path = os.environ.get("FLYUPMEM_STORE_PATH", str(Path.home() / ".flyupmem"))
-        self._token_budget = int(os.environ.get("FLYUPMEM_TOKEN_BUDGET", "2048"))
+        cfg = self._load_config(self._hermes_home)
+
+        cfg_store_path = _expand_path(cfg.get("store_path"))
+        env_store_path = _expand_path(os.environ.get("FLYUPMEM_STORE_PATH"))
+        self._store_path = env_store_path or cfg_store_path or str(Path.home() / ".flyupmem")
+
+        raw_budget = os.environ.get("FLYUPMEM_TOKEN_BUDGET", cfg.get("token_budget", 2048))
+        try:
+            self._token_budget = int(raw_budget)
+        except (TypeError, ValueError):
+            logger.warning("Invalid FlyupMem token_budget %r; using 2048", raw_budget)
+            self._token_budget = 2048
+
         self._prefetch_cache: Optional[str] = None
         self._prefetch_lock = threading.Lock()
         self._turn_count = 0
@@ -165,9 +183,9 @@ class FlyupMemProvider(MemoryProvider):
                 self._run_cli("learn", safe_user_content, assistant_content)
                 self._turn_count += 1
 
-                # Run maintenance every 20 turns
+                # Run maintenance every 20 learned turns
                 if self._turn_count % 20 == 0:
-                    self._run_cli("maintain")
+                    self._run_cli("maintain", "--mode", "light")
             except Exception as e:
                 logger.debug("FlyupMem sync_turn failed: %s", e)
 
@@ -183,10 +201,7 @@ class FlyupMemProvider(MemoryProvider):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "query": {
-                            "type": "string",
-                            "description": "Search query to find relevant memories",
-                        },
+                        "query": {"type": "string", "description": "Search query to find relevant memories"},
                         "explain": {
                             "type": "boolean",
                             "description": "Return structured recall diagnostics and per-signal scores instead of injection text only",
@@ -202,10 +217,7 @@ class FlyupMemProvider(MemoryProvider):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "statement": {
-                            "type": "string",
-                            "description": "The fact or knowledge to remember",
-                        },
+                        "statement": {"type": "string", "description": "The fact or knowledge to remember"},
                     },
                     "required": ["statement"],
                 },
@@ -216,10 +228,7 @@ class FlyupMemProvider(MemoryProvider):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "memory_id": {
-                            "type": "string",
-                            "description": "Memory ID (e.g. ENG-20260501-001)",
-                        },
+                        "memory_id": {"type": "string", "description": "Memory ID (e.g. ENG-20260501-001)"},
                         "signal": {
                             "type": "string",
                             "enum": ["positive", "negative", "neutral"],
@@ -240,12 +249,35 @@ class FlyupMemProvider(MemoryProvider):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "memory_id": {
-                            "type": "string",
-                            "description": "Memory ID (e.g. ENG-20260501-001)",
-                        },
+                        "memory_id": {"type": "string", "description": "Memory ID (e.g. ENG-20260501-001)"},
                     },
                     "required": ["memory_id"],
+                },
+            },
+            {
+                "name": "flyup_maintain",
+                "description": "Run FlyupMem maintenance: decay, consolidation, graph updates, and optional REM processing.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "mode": {
+                            "type": "string",
+                            "enum": ["light", "deep", "rem"],
+                            "description": "Maintenance mode. Defaults to light for interactive safety.",
+                            "default": "light",
+                        },
+                    },
+                },
+            },
+            {
+                "name": "flyup_reflect",
+                "description": "Synthesize higher-level mental models from observations. Requires FlyupMem LLM config.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string", "description": "Reflection topic or question"},
+                    },
+                    "required": ["query"],
                 },
             },
         ]
@@ -277,10 +309,25 @@ class FlyupMemProvider(MemoryProvider):
             elif tool_name == "flyup_status":
                 result = self._run_cli("status")
                 return result or "{}"
+
             elif tool_name == "flyup_inspect":
                 memory_id = args.get("memory_id", "")
                 result = self._run_cli("inspect", memory_id, "--json")
                 return result or '{"error": "Memory not found"}'
+
+            elif tool_name == "flyup_maintain":
+                mode = args.get("mode") or "light"
+                if mode not in ("light", "deep", "rem"):
+                    return json.dumps({"error": "mode must be one of: light, deep, rem"})
+                result = self._run_cli("maintain", "--mode", mode)
+                return result or '{"maintained": false}'
+
+            elif tool_name == "flyup_reflect":
+                query = args.get("query", "")
+                if not query:
+                    return json.dumps({"error": "query is required"})
+                result = self._run_cli("reflect", query)
+                return result or '{"reflected": false}'
 
             else:
                 return json.dumps({"error": f"Unknown tool: {tool_name}"})
@@ -301,8 +348,8 @@ class FlyupMemProvider(MemoryProvider):
                         if safe_user_content and has_auto_learn_signal(safe_user_content):
                             self._run_cli("learn", safe_user_content, next_msg.get("content", ""))
 
-                # Run maintenance at session end
-                self._run_cli("maintain")
+                # Run light maintenance at session end
+                self._run_cli("maintain", "--mode", "light")
             except Exception as e:
                 logger.debug("FlyupMem on_session_end failed: %s", e)
 
@@ -339,11 +386,37 @@ class FlyupMemProvider(MemoryProvider):
             },
         ]
 
+    def save_config(self, values: Dict[str, Any], hermes_home: str) -> None:
+        """Persist FlyupMem provider config to $HERMES_HOME/flyupmem.json."""
+        config_path = Path(hermes_home).expanduser() / "flyupmem.json"
+        existing: Dict[str, Any] = {}
+        if config_path.exists():
+            try:
+                existing = json.loads(config_path.read_text())
+            except Exception:
+                existing = {}
+        for key in ("store_path", "token_budget"):
+            if key in values and values[key] not in (None, ""):
+                existing[key] = values[key]
+        config_path.write_text(json.dumps(existing, indent=2))
+
     def shutdown(self) -> None:
         """Clean shutdown."""
         self._prefetch_cache = None
 
     # ─── Internal helpers ──────────────────────────────────────
+
+    def _load_config(self, hermes_home: str) -> Dict[str, Any]:
+        """Load provider config saved by hermes memory setup."""
+        config_path = Path(hermes_home).expanduser() / "flyupmem.json"
+        if not config_path.exists():
+            return {}
+        try:
+            data = json.loads(config_path.read_text())
+            return data if isinstance(data, dict) else {}
+        except Exception as e:
+            logger.debug("Failed to load FlyupMem config %s: %s", config_path, e)
+            return {}
 
     def _run_cli(self, *args: str) -> Optional[str]:
         """Run flyupmem CLI command and return stdout."""
@@ -366,3 +439,8 @@ class FlyupMemProvider(MemoryProvider):
         except FileNotFoundError:
             logger.debug("FlyupMem CLI not found")
             return None
+
+
+def register(ctx) -> None:
+    """Register FlyupMem as a Hermes MemoryProvider plugin."""
+    ctx.register_memory_provider(FlyupMemProvider())

@@ -1,0 +1,61 @@
+{
+  "id": "flyupmem",
+  "name": "FlyupMem",
+  "description": "Local-first, zero-cost memory system for AI agents. Four-layer hierarchy (Engram → Observation → Mental Model → Experience), multi-path recall (BM25 + semantic + graph + temporal), and automatic consolidation.",
+  "activation": {
+    "onStartup": true
+  },
+  "kind": "memory",
+  "contracts": {
+    "tools": [
+      "flyup_learn",
+      "flyup_recall",
+      "flyup_feedback",
+      "flyup_status",
+      "flyup_inspect",
+      "flyup_maintain",
+      "flyup_reflect"
+    ]
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "autoLearn": {
+        "type": "boolean",
+        "default": true,
+        "description": "Auto-extract engrams after each conversation turn"
+      },
+      "autoRecall": {
+        "type": "boolean",
+        "default": true,
+        "description": "Auto-inject relevant memories before each LLM call"
+      },
+      "autoDecay": {
+        "type": "boolean",
+        "default": true,
+        "description": "Run batch decay and maintenance on startup"
+      },
+      "tokenBudget": {
+        "type": "integer",
+        "default": 2048,
+        "minimum": 256,
+        "maximum": 8192,
+        "description": "Token budget for memory injection"
+      },
+      "storePath": {
+        "type": "string",
+        "description": "Custom store path (default: ~/.flyupmem)"
+      },
+      "embeddingEnabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable semantic search via embedding model"
+      }
+    }
+  }
+}

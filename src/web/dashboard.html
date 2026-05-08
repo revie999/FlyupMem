@@ -202,7 +202,7 @@ textarea.edit-field{min-height:60px;resize:vertical}
     <!-- Embedding Status Card -->
     <div class="panel" style="margin-bottom:16px">
       <div class="panel-header"><h2>📐 Embedding Status</h2></div>
-      <div class="panel-body" id="embedding-status">Loading...</div>
+      <div class="panel-body" id="config-embedding-status">Loading...</div>
     </div>
     <div class="panel">
       <div class="panel-header">
@@ -775,7 +775,7 @@ async function testLLM() {
 // ─── Config ─────────────────────────────────────────
 async function loadSystemStatus() {
   try {
-    const res = await fetch(API + '/api/status');
+    const res = await fetch(API + '/api/models');
     const d = await res.json();
 
     // LLM Status
@@ -800,7 +800,7 @@ async function loadSystemStatus() {
     }
 
     // Embedding Status
-    const embEl = document.getElementById('embedding-status');
+    const embEl = document.getElementById('config-embedding-status');
     if (d.embedding) {
       const emb = d.embedding;
       const statusIcon = emb.available ? '✅' : '❌';
@@ -817,7 +817,7 @@ async function loadSystemStatus() {
     }
   } catch (err) {
     document.getElementById('config-llm-status').innerHTML = '<span style="color:var(--red)">Failed to load status</span>';
-    document.getElementById('embedding-status').innerHTML = '<span style="color:var(--red)">Failed to load status</span>';
+    document.getElementById('config-embedding-status').innerHTML = '<span style="color:var(--red)">Failed to load status</span>';
   }
 }
 
