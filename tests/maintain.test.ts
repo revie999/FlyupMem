@@ -7,7 +7,7 @@ import * as yaml from 'js-yaml'
 import { execFileSync } from 'node:child_process'
 import { FlyupMemStore } from '../src/core/store.js'
 import { flyupMaintain, loadMaintenanceState } from '../src/tools/flyup_maintain.js'
-import type { Engram } from '../src/core/types.js'
+import type { Engram, Observation } from '../src/core/types.js'
 import { generateId } from '../src/core/id.js'
 import { contentHash } from '../src/core/hash.js'
 
@@ -61,6 +61,32 @@ function makeEngram(overrides: Partial<Engram> = {}): Engram {
   }
 }
 
+function makeObservation(overrides: Partial<Observation> = {}): Observation {
+  const now = new Date().toISOString()
+  const today = now.slice(0, 10)
+  return {
+    id: generateId('observation'),
+    layer: 'observation',
+    status: 'active',
+    scope: 'global',
+    domain: 'debugging',
+    tags: ['debugging', 'workflow'],
+    title: 'Evidence-first debugging',
+    statement: 'Debugging workflow should collect evidence before changing code',
+    source_memory_ids: [],
+    proof_count: 2,
+    evidence: [],
+    trend: 'stable',
+    confidence: 7,
+    activation: { retrieval_strength: 0.8, storage_strength: 1.0, frequency: 3, turn_count: 2, last_accessed: today },
+    emotional_weight: 5,
+    entities: [{ name: 'debugging', type: 'concept' }],
+    temporal: { learned_at: now, valid_from: now, valid_until: null },
+    history: [{ event: 'created', at: now, from: [] }],
+    ...overrides,
+  }
+}
+
 describe('flyupMaintain tiered scheduler', () => {
   let dir: string
   let store: FlyupMemStore
@@ -104,6 +130,19 @@ describe('flyupMaintain tiered scheduler', () => {
     expect(result.decay.processed).toBe(1)
     expect(result.state.last_rem_at).toBeTruthy()
     expect(loadMaintenanceState(store).last_rem_at).toBe(result.state.last_rem_at)
+  })
+
+  it('runs deep mode with Experience induction', async () => {
+    store.addObservation(makeObservation({ id: 'OBS-MAINT-101', statement: 'Debugging workflow starts by reading logs' }))
+    store.addObservation(makeObservation({ id: 'OBS-MAINT-102', statement: 'Debugging workflow requires evidence collection' }))
+    store.addObservation(makeObservation({ id: 'OBS-MAINT-103', statement: 'Debugging workflow avoids speculative edits' }))
+
+    const result = await flyupMaintain(store, { mode: 'deep' })
+
+    expect(result.mode).toBe('deep')
+    expect(result.experience.created).toBe(1)
+    expect(result.state.last_deep_at).toBeTruthy()
+    expect(store.experiences).toHaveLength(1)
   })
 
   it('CLI --store runs maintenance against the requested store path', () => {

@@ -7,6 +7,7 @@ import type { FlyupMemStore } from '../core/store.js'
 import { batchDecay } from '../lifecycle/batch-decay.js'
 import { consolidateUnmerged } from '../lifecycle/consolidate.js'
 import { maintainGraphBulk } from '../lifecycle/graph-maintain.js'
+import { induceExperiences } from '../lifecycle/experience.js'
 
 export type MaintainMode = 'light' | 'deep' | 'rem'
 
@@ -14,6 +15,7 @@ export interface MaintainResult {
   mode: MaintainMode
   decay: { processed: number; statusChanges: number }
   consolidation: { merged: number; updated: number; conflicts: number; skipped: number }
+  experience: { created: number; skipped: number; candidates: number }
   graph: { processed: number }
   state: MaintenanceState
 }
@@ -31,6 +33,7 @@ export interface MaintainOptions {
 
 const EMPTY_DECAY = { processed: 0, statusChanges: 0 }
 const EMPTY_CONSOLIDATION = { merged: 0, updated: 0, conflicts: 0, skipped: 0 }
+const EMPTY_EXPERIENCE = { created: 0, skipped: 0, candidates: 0 }
 const EMPTY_GRAPH = { processed: 0 }
 
 function maintenancePath(store: FlyupMemStore): string {
@@ -88,8 +91,8 @@ function normalizeConsolidation(result: { merged: number; updated?: number; conf
 /**
  * Run maintenance by tier:
  * - light: cheap graph refresh for the current hot set
- * - deep: observation consolidation + graph refresh
- * - rem: full decay + consolidation + graph refresh
+ * - deep: observation consolidation + Experience induction + graph refresh
+ * - rem: full decay + consolidation + Experience induction + graph refresh
  */
 export async function flyupMaintain(store: FlyupMemStore, options: MaintainOptions = {}): Promise<MaintainResult> {
   const mode = options.mode ?? 'rem'
@@ -99,6 +102,7 @@ export async function flyupMaintain(store: FlyupMemStore, options: MaintainOptio
 
   let decay = EMPTY_DECAY
   let consolidation = EMPTY_CONSOLIDATION
+  let experience = EMPTY_EXPERIENCE
   let graph = EMPTY_GRAPH
 
   try {
@@ -109,6 +113,12 @@ export async function flyupMaintain(store: FlyupMemStore, options: MaintainOptio
 
     if (mode === 'deep' || mode === 'rem') {
       consolidation = normalizeConsolidation(await consolidateUnmerged(store))
+      const expResult = induceExperiences(store, { minEvidence: 3, maxExperiences: 5, includeMentalModels: true })
+      experience = {
+        created: expResult.created.length,
+        skipped: expResult.skipped,
+        candidates: expResult.candidates,
+      }
     }
 
     graph = maintainGraphBulk(store)
@@ -125,5 +135,5 @@ export async function flyupMaintain(store: FlyupMemStore, options: MaintainOptio
     throw err
   }
 
-  return { mode, decay, consolidation, graph, state }
+  return { mode, decay, consolidation, experience, graph, state }
 }
