@@ -255,6 +255,7 @@ async function loadStats() {
     <div class="stat"><div class="num">${d.engrams}</div><div class="label">Engrams</div></div>
     <div class="stat"><div class="num">${d.observations}</div><div class="label">Observations</div></div>
     <div class="stat"><div class="num">${d.mentalModels}</div><div class="label">Mental Models</div></div>
+    <div class="stat"><div class="num">${d.experiences ?? 0}</div><div class="label">Experiences</div></div>
     <div class="stat"><div class="num">${d.episodes}</div><div class="label">Episodes</div></div>
     <div class="stat"><div class="num">${d.graph.entities}</div><div class="label">Entities</div></div>
     <div class="stat"><div class="num">${d.graph.edges}</div><div class="label">Edges</div></div>
@@ -364,6 +365,12 @@ async function showDetail(id) {
   const url = isExperience ? `${API}/api/experience?id=${encodeURIComponent(id)}` : `${API}/api/memory?id=${encodeURIComponent(id)}`;
   const res = await fetch(url);
   const d = await res.json();
+  if (d.error) {
+    const panel = document.getElementById('action-panel');
+    panel.innerHTML = `<div class="panel"><div class="panel-body" style="color:var(--red)">${esc(d.error)}</div></div>`;
+    panel.classList.add('show');
+    return;
+  }
   const m = d.memory || d.experience;
   renderDetail(m, d.currentActivation, d.related, false, d.evidence);
 }
@@ -573,12 +580,14 @@ async function runReflect(btn) {
 }
 
 async function loadExperiences() {
+  const panel = document.getElementById('action-panel');
+  panel.classList.remove('show');
+  panel.innerHTML = '';
   const res = await fetch(API + '/api/experiences?limit=50');
   const d = await res.json();
   selectedIds.clear(); updateBatchBar();
   renderList(d.experiences || []);
-  const panel = document.getElementById('action-panel');
-  panel.innerHTML = `<div class="panel"><div class="panel-body"><strong>Experience browser</strong> · ${d.total || 0} total · click an Experience for evidence chain.</div></div>`;
+  panel.innerHTML = `<div class="panel"><div class="panel-body"><strong>Experience browser</strong> · ${d.total || 0} total · click an Experience to see evidence chain.</div></div>`;
   panel.classList.add('show');
 }
 
