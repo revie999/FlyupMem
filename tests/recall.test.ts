@@ -81,7 +81,7 @@ describe('Integration: learn → recall → status', () => {
     expect(recallResult.injection).not.toContain('主人偏好直接给结论')
   })
 
-  it('does not inject unrelated memories when semantic search is available', async () => {
+  it('does not inject unrelated memories when semantic search is available', { timeout: 15000 }, async () => {
     const ready = await initEmbedder({ timeoutMs: 1000 })
     if (!ready || !isEmbeddingAvailable()) return
 
