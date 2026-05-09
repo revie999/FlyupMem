@@ -100,6 +100,10 @@ textarea.edit-field{min-height:60px;resize:vertical}
 .test-result{margin-top:12px;padding:10px 14px;background:var(--bg);border-radius:6px;font-size:13px;font-family:monospace}
 .test-result.ok{border-left:3px solid var(--green)}
 .test-result.err{border-left:3px solid var(--red)}
+.toast{position:fixed;bottom:20px;right:20px;max-width:400px;padding:10px 16px;border-radius:6px;font-size:13px;z-index:999;animation:toastIn .3s ease;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+.toast.error{background:#490202;border:1px solid var(--red);color:#ffb3b3}
+.toast.info{background:#0d2137;border:1px solid var(--accent);color:#c9d1d9}
+@keyframes toastIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
 <body>
@@ -240,8 +244,9 @@ let graphData = { nodes: [], edges: [] };
 function showPage(name) {
   document.querySelectorAll('[id^="page-"]').forEach(p => p.classList.remove('show'));
   document.getElementById('page-' + name).classList.add('show');
-  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  event.target.classList.add('active');
+  document.querySelectorAll('nav button').forEach(b => {
+    b.classList.toggle('active', b.getAttribute('onclick')?.includes("'" + name + "'"));
+  });
   if (name === 'graph') loadGraph();
   if (name === 'config') { loadSystemStatus(); loadConfig(); }
   if (name === 'models') loadModels();
@@ -249,17 +254,19 @@ function showPage(name) {
 
 // ─── Stats ──────────────────────────────────────────
 async function loadStats() {
-  const res = await fetch(API + '/api/stats');
-  const d = await res.json();
-  document.getElementById('stats').innerHTML = `
-    <div class="stat"><div class="num">${d.engrams}</div><div class="label">Engrams</div></div>
-    <div class="stat"><div class="num">${d.observations}</div><div class="label">Observations</div></div>
-    <div class="stat"><div class="num">${d.mentalModels}</div><div class="label">Mental Models</div></div>
-    <div class="stat"><div class="num">${d.experiences ?? 0}</div><div class="label">Experiences</div></div>
-    <div class="stat"><div class="num">${d.episodes}</div><div class="label">Episodes</div></div>
-    <div class="stat"><div class="num">${d.graph.entities}</div><div class="label">Entities</div></div>
-    <div class="stat"><div class="num">${d.graph.edges}</div><div class="label">Edges</div></div>
-  `;
+  try {
+    const res = await fetch(API + '/api/stats');
+    const d = await res.json();
+    document.getElementById('stats').innerHTML = `
+      <div class="stat"><div class="num">${d.engrams}</div><div class="label">Engrams</div></div>
+      <div class="stat"><div class="num">${d.observations}</div><div class="label">Observations</div></div>
+      <div class="stat"><div class="num">${d.mentalModels}</div><div class="label">Mental Models</div></div>
+      <div class="stat"><div class="num">${d.experiences ?? 0}</div><div class="label">Experiences</div></div>
+      <div class="stat"><div class="num">${d.episodes}</div><div class="label">Episodes</div></div>
+      <div class="stat"><div class="num">${d.graph.entities}</div><div class="label">Entities</div></div>
+      <div class="stat"><div class="num">${d.graph.edges}</div><div class="label">Edges</div></div>
+    `;
+  } catch (e) { showToast('Failed to load stats: ' + e.message); }
 }
 
 // ─── Memories ───────────────────────────────────────
@@ -269,27 +276,31 @@ async function loadMemories() {
   document.getElementById('select-all').checked = false;
   const layer = document.getElementById('filter-layer').value;
   const status = document.getElementById('filter-status').value;
-  const res = await fetch(`${API}/api/memories?layer=${layer}&status=${status}&limit=50`);
-  const d = await res.json();
-  renderList(d.memories);
+  try {
+    const res = await fetch(`${API}/api/memories?layer=${layer}&status=${status}&limit=50`);
+    const d = await res.json();
+    renderList(d.memories);
+  } catch (e) { showToast('Failed to load memories: ' + e.message); }
 }
 
 async function doSearch() {
   const q = document.getElementById('search-input').value.trim();
   if (!q) return loadMemories();
   const mode = document.getElementById('search-mode').value;
-  const res = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}&mode=${encodeURIComponent(mode)}&limit=50`);
-  const d = await res.json();
-  selectedIds.clear();
-  updateBatchBar();
-  renderList(d.results);
-  if (d.diagnostics) {
-    const panel = document.getElementById('action-panel');
-    panel.innerHTML = `<div class="panel"><div class="panel-body">
-      <strong>Search diagnostics</strong> · mode: ${esc(d.mode)} · semantic: ${d.diagnostics.semantic_available ? 'available' : 'unavailable'} · results: ${d.total}
-    </div></div>`;
-    panel.classList.add('show');
-  }
+  try {
+    const res = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}&mode=${encodeURIComponent(mode)}&limit=50`);
+    const d = await res.json();
+    selectedIds.clear();
+    updateBatchBar();
+    renderList(d.results);
+    if (d.diagnostics) {
+      const panel = document.getElementById('action-panel');
+      panel.innerHTML = `<div class="panel"><div class="panel-body">
+        <strong>Search diagnostics</strong> · mode: ${esc(d.mode)} · semantic: ${d.diagnostics.semantic_available ? 'available' : 'unavailable'} · results: ${d.total}
+      </div></div>`;
+      panel.classList.add('show');
+    }
+  } catch (e) { showToast('Search failed: ' + e.message); }
 }
 
 function renderList(memories) {
@@ -346,33 +357,39 @@ async function batchAction(action) {
   if (action === 'delete' && !confirm(`Delete ${count} memories? This cannot be undone.`)) return;
   if (action === 'retire' && !confirm(`Retire ${count} memories?`)) return;
 
-  const res = await fetch(API + '/api/memories/batch', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ids: [...selectedIds], action }),
-  });
-  const d = await res.json();
-  if (d.success) {
-    alert(`${d.affected} memories ${action === 'delete' ? 'deleted' : action === 'retire' ? 'retired' : 'activated'}.`);
-    loadMemories();
-    loadStats();
-  }
+  try {
+    const res = await fetch(API + '/api/memories/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [...selectedIds], action }),
+    });
+    const d = await res.json();
+    if (d.success) {
+      showToast(`${d.affected} memories ${action === 'delete' ? 'deleted' : action === 'retire' ? 'retired' : 'activated'}.`, 'info');
+      loadMemories();
+      loadStats();
+    } else {
+      showToast('Batch action failed: ' + (d.error || 'unknown error'));
+    }
+  } catch (e) { showToast('Batch action failed: ' + e.message); }
 }
 
 // ─── Detail / Edit ──────────────────────────────────
 async function showDetail(id) {
   const isExperience = id.startsWith('EXP-');
   const url = isExperience ? `${API}/api/experience?id=${encodeURIComponent(id)}` : `${API}/api/memory?id=${encodeURIComponent(id)}`;
-  const res = await fetch(url);
-  const d = await res.json();
-  if (d.error) {
-    const panel = document.getElementById('action-panel');
-    panel.innerHTML = `<div class="panel"><div class="panel-body" style="color:var(--red)">${esc(d.error)}</div></div>`;
-    panel.classList.add('show');
-    return;
-  }
-  const m = d.memory || d.experience;
-  renderDetail(m, d.currentActivation, d.related, false, d.evidence);
+  try {
+    const res = await fetch(url);
+    const d = await res.json();
+    if (d.error) {
+      const panel = document.getElementById('action-panel');
+      panel.innerHTML = `<div class="panel"><div class="panel-body" style="color:var(--red)">${esc(d.error)}</div></div>`;
+      panel.classList.add('show');
+      return;
+    }
+    const m = d.memory || d.experience;
+    renderDetail(m, d.currentActivation, d.related, false, d.evidence);
+  } catch (e) { showToast('Failed to load detail: ' + e.message); }
 }
 
 function renderDetail(m, activation, related, editing, evidenceChain) {
@@ -386,7 +403,7 @@ function renderDetail(m, activation, related, editing, evidenceChain) {
   if (evidenceChain?.length) extra += `<div class="field"><span class="key">Evidence Chain (${evidenceChain.length})</span><div class="val">${evidenceChain.map(e => `<div><code>${esc(e.id)}</code> — ${esc(e.title || e.statement || '')}</div>`).join('')}</div></div>`;
   if (m.evidence?.length) extra += `<div class="field"><span class="key">Evidence (${m.evidence.length})</span><div class="val">${m.evidence.map(e => esc(e.quote || e.engram_id)).join(' | ')}</div></div>`;
   if (m.associations?.length) extra += `<div class="field"><span class="key">Associations</span><div class="val">${m.associations.map(a => `${esc(a.target)} (${esc(a.type)}, ${a.weight})`).join(', ')}</div></div>`;
-  if (related?.length) extra += `<div class="field"><span class="key">Graph Relations (${related.length})</span><div class="val">${related.map(r => `${r.target} [${r.type}]`).join(', ')}</div></div>`;
+  if (related?.length) extra += `<div class="field"><span class="key">Graph Relations (${related.length})</span><div class="val">${related.map(r => `${esc(r.target)} [${esc(r.type)}]`).join(', ')}</div></div>`;
 
   if (editing) {
     el.innerHTML = `
@@ -435,9 +452,11 @@ function renderDetail(m, activation, related, editing, evidenceChain) {
 }
 
 async function editMemory(id) {
-  const res = await fetch(`${API}/api/memory?id=${encodeURIComponent(id)}`);
-  const d = await res.json();
-  renderDetail(d.memory, d.currentActivation, d.related, true);
+  try {
+    const res = await fetch(`${API}/api/memory?id=${encodeURIComponent(id)}`);
+    const d = await res.json();
+    renderDetail(d.memory, d.currentActivation, d.related, true);
+  } catch (e) { showToast('Failed to load for editing: ' + e.message); }
 }
 
 async function saveMemory(id) {
@@ -462,32 +481,36 @@ async function saveMemory(id) {
   if (confidence !== undefined) body.confidence = parseFloat(confidence);
   if (status !== undefined) body.status = status;
 
-  const res = await fetch(API + '/api/memory', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const d = await res.json();
-  if (d.success) {
-    showDetail(id);
-    loadMemories();
-    loadStats();
-  } else {
-    alert('Save failed: ' + (d.error || 'unknown error'));
-  }
+  try {
+    const res = await fetch(API + '/api/memory', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const d = await res.json();
+    if (d.success) {
+      showDetail(id);
+      loadMemories();
+      loadStats();
+    } else {
+      showToast('Save failed: ' + (d.error || 'unknown error'));
+    }
+  } catch (e) { showToast('Save failed: ' + e.message); }
 }
 
 async function deleteMemory(id) {
   if (!confirm('Delete this memory? This cannot be undone.')) return;
-  const res = await fetch(`${API}/api/memory?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-  const d = await res.json();
-  if (d.success) {
-    document.getElementById('detail').classList.remove('show');
-    loadMemories();
-    loadStats();
-  } else {
-    alert('Delete failed: ' + (d.error || 'unknown error'));
-  }
+  try {
+    const res = await fetch(`${API}/api/memory?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const d = await res.json();
+    if (d.success) {
+      document.getElementById('detail').classList.remove('show');
+      loadMemories();
+      loadStats();
+    } else {
+      showToast('Delete failed: ' + (d.error || 'unknown error'));
+    }
+  } catch (e) { showToast('Delete failed: ' + e.message); }
 }
 
 // ─── Management Actions ─────────────────────────────
@@ -517,36 +540,40 @@ async function createMemory(btn) {
   };
   if (!body.statement) return alert('Statement is required');
   btn.disabled = true; btn.textContent = 'Creating...';
-  const res = await fetch(API + '/api/memory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const d = await res.json();
-  btn.disabled = false; btn.textContent = 'Create';
-  if (!d.success) return alert('Create failed: ' + (d.error || 'unknown error'));
-  document.getElementById('action-panel').classList.remove('show');
-  loadStats(); loadMemories(); showDetail(d.memory.id);
+  try {
+    const res = await fetch(API + '/api/memory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const d = await res.json();
+    btn.disabled = false; btn.textContent = 'Create';
+    if (!d.success) { showToast('Create failed: ' + (d.error || 'unknown error')); return; }
+    document.getElementById('action-panel').classList.remove('show');
+    loadStats(); loadMemories(); showDetail(d.memory.id);
+  } catch (e) { btn.disabled = false; btn.textContent = 'Create'; showToast('Create failed: ' + e.message); }
 }
 
 async function runMaintain(mode, btn) {
   if ((mode === 'deep' || mode === 'rem') && !confirm(`Run ${mode} maintenance now?`)) return;
   const old = btn.textContent;
   btn.disabled = true; btn.textContent = 'Running...';
-  const res = await fetch(API + '/api/maintain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
-  const d = await res.json();
-  btn.disabled = false; btn.textContent = old;
-  const panel = document.getElementById('action-panel');
-  if (!d.success) {
-    panel.innerHTML = `<div class="panel"><div class="panel-body" style="color:var(--red)">Maintain failed: ${esc(d.error || 'unknown error')}</div></div>`;
-  } else {
-    const r = d.result;
-    panel.innerHTML = `<div class="panel"><div class="panel-body">
-      <h3>Maintenance complete: ${esc(r.mode)}</h3>
-      <div>Decay: ${r.decay.processed} processed, ${r.decay.statusChanges} status changes</div>
-      <div>Consolidation: ${r.consolidation.merged} merged, ${r.consolidation.updated} updated, ${r.consolidation.conflicts} conflicts</div>
-      <div>Experience: ${r.experience.created} created, ${r.experience.candidates} candidates, ${r.experience.skipped} skipped</div>
-      <div>Graph: ${r.graph.processed} processed</div>
-    </div></div>`;
-    loadStats(); loadMemories();
-  }
-  panel.classList.add('show');
+  try {
+    const res = await fetch(API + '/api/maintain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+    const d = await res.json();
+    btn.disabled = false; btn.textContent = old;
+    const panel = document.getElementById('action-panel');
+    if (!d.success) {
+      panel.innerHTML = `<div class="panel"><div class="panel-body" style="color:var(--red)">Maintain failed: ${esc(d.error || 'unknown error')}</div></div>`;
+    } else {
+      const r = d.result;
+      panel.innerHTML = `<div class="panel"><div class="panel-body">
+        <h3>Maintenance complete: ${esc(r.mode)}</h3>
+        <div>Decay: ${r.decay.processed} processed, ${r.decay.statusChanges} status changes</div>
+        <div>Consolidation: ${r.consolidation.merged} merged, ${r.consolidation.updated} updated, ${r.consolidation.conflicts} conflicts</div>
+        <div>Experience: ${r.experience.created} created, ${r.experience.candidates} candidates, ${r.experience.skipped} skipped</div>
+        <div>Graph: ${r.graph.processed} processed</div>
+      </div></div>`;
+      loadStats(); loadMemories();
+    }
+    panel.classList.add('show');
+  } catch (e) { btn.disabled = false; btn.textContent = old; showToast('Maintain failed: ' + e.message); }
 }
 
 function showReflectPanel() {
@@ -564,31 +591,54 @@ function showReflectPanel() {
 
 async function runReflect(btn) {
   const query = document.getElementById('reflect-query').value.trim();
-  if (!query) return alert('Query is required');
+  if (!query) { showToast('Query is required'); return; }
   btn.disabled = true; btn.textContent = 'Reflecting...';
-  const res = await fetch(API + '/api/reflect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
-  const d = await res.json();
-  btn.disabled = false; btn.textContent = 'Reflect';
-  const panel = document.getElementById('action-panel');
-  if (!d.success) {
-    panel.innerHTML = `<div class="panel"><div class="panel-body" style="color:var(--red)">Reflect failed: ${esc(d.error || 'unknown error')}</div></div>`;
-  } else {
-    panel.innerHTML = `<div class="panel"><div class="panel-body"><h3>Reflect complete</h3><pre>${esc(JSON.stringify(d, null, 2))}</pre></div></div>`;
-    loadStats(); loadMemories();
-  }
-  panel.classList.add('show');
+  try {
+    const res = await fetch(API + '/api/reflect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
+    const d = await res.json();
+    btn.disabled = false; btn.textContent = 'Reflect';
+    const panel = document.getElementById('action-panel');
+    if (!d.success) {
+      panel.innerHTML = `<div class="panel"><div class="panel-body" style="color:var(--red)">Reflect failed: ${esc(d.error || 'unknown error')}</div></div>`;
+    } else {
+      panel.innerHTML = `<div class="panel"><div class="panel-body"><h3>Reflect complete</h3><pre>${esc(JSON.stringify(d, null, 2))}</pre></div></div>`;
+      loadStats(); loadMemories();
+    }
+    panel.classList.add('show');
+  } catch (e) { btn.disabled = false; btn.textContent = 'Reflect'; showToast('Reflect failed: ' + e.message); }
 }
 
 async function loadExperiences() {
   const panel = document.getElementById('action-panel');
-  panel.classList.remove('show');
-  panel.innerHTML = '';
-  const res = await fetch(API + '/api/experiences?limit=50');
-  const d = await res.json();
-  selectedIds.clear(); updateBatchBar();
-  renderList(d.experiences || []);
-  panel.innerHTML = `<div class="panel"><div class="panel-body"><strong>Experience browser</strong> · ${d.total || 0} total · click an Experience to see evidence chain.</div></div>`;
-  panel.classList.add('show');
+  try {
+    const res = await fetch(API + '/api/experiences?limit=50');
+    const d = await res.json();
+    const exps = d.experiences || [];
+    let html = `<div class="panel"><div class="panel-header"><h2>Experience Browser</h2><span style="font-size:12px;color:var(--text-dim)">${d.total || 0} total</span></div><div class="panel-body">`;
+    if (!exps.length) {
+      html += '<div class="empty">No experiences found</div>';
+    } else {
+      html += '<ul class="memory-list">';
+      exps.forEach(e => {
+        const title = e.title || e.statement?.slice(0, 80) || e.id;
+        const date = (e.last_seen || e.temporal?.learned_at || '').slice(0, 10);
+        html += `<li class="memory-item" onclick="showDetail('${esc(e.id)}')">
+          <div class="content">
+            <div class="title">${esc(title)}</div>
+            <div class="meta">
+              <span class="badge badge-experience">Experience</span>
+              <span class="badge badge-${e.status || 'candidate'}">${e.status || 'candidate'}</span>
+              <span>📅 ${date}</span>
+            </div>
+          </div>
+        </li>`;
+      });
+      html += '</ul>';
+    }
+    html += '</div></div>';
+    panel.innerHTML = html;
+    panel.classList.add('show');
+  } catch (e) { showToast('Failed to load experiences: ' + e.message); }
 }
 
 // ─── Graph (Interactive) ────────────────────────────
@@ -599,13 +649,15 @@ const graphState = {
 };
 
 async function loadGraph() {
-  const res = await fetch(API + '/api/graph');
-  const d = await res.json();
-  graphData = d;
-  graphState.offsetX = 0; graphState.offsetY = 0; graphState.scale = 1;
-  graphState.selectedNode = null;
-  computeLayout();
-  drawGraph();
+  try {
+    const res = await fetch(API + '/api/graph');
+    const d = await res.json();
+    graphData = d;
+    graphState.offsetX = 0; graphState.offsetY = 0; graphState.scale = 1;
+    graphState.selectedNode = null;
+    computeLayout();
+    drawGraph();
+  } catch (e) { showToast('Failed to load graph: ' + e.message); }
 }
 
 function computeLayout() {
@@ -804,59 +856,65 @@ function getNodeAtPos(x, y) {
   });
 })();
 
+// Graph resize observer
+if (window.ResizeObserver) {
+  let resizeTimer;
+  new ResizeObserver(() => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (document.getElementById('page-graph').classList.contains('show')) {
+        computeLayout();
+        drawGraph();
+      }
+    }, 150);
+  }).observe(document.getElementById('graph-container'));
+}
+
 // ─── Models ────────────────────────────────────────
 async function loadModels() {
-  const res = await fetch(API + '/api/models');
-  const d = await res.json();
+  try {
+    const res = await fetch(API + '/api/models');
+    const d = await res.json();
 
-  // Embedding status
-  const emb = d.embedding || {};
-  document.getElementById('embedding-status').innerHTML = `
-    <div class="status-row"><span class="key">Model</span><span class="val">${esc(emb.model || '—')}</span></div>
-    <div class="status-row"><span class="key">Status</span><span class="val"><span class="status-dot ${emb.available ? 'ok' : 'err'}"></span>${emb.available ? 'Available' : 'Not loaded'}</span></div>
-    <div class="status-row"><span class="key">Type</span><span class="val">${esc(emb.type || '—')}</span></div>
-    <div class="status-row"><span class="key">Runtime</span><span class="val">${esc(emb.runtime || '—')}</span></div>
-    <div class="status-row"><span class="key">Dimension</span><span class="val">${emb.dimension ?? '—'}</span></div>
-    <div style="margin-top:12px">
-      <button class="btn btn-accent" onclick="testEmbedding()" id="btn-test-emb">Test Embedding</button>
-      <span id="emb-test-result"></span>
-    </div>`;
+    // Embedding status
+    const emb = d.embedding || {};
+    document.getElementById('embedding-status').innerHTML = `
+      <div class="status-row"><span class="key">Model</span><span class="val">${esc(emb.model || '—')}</span></div>
+      <div class="status-row"><span class="key">Status</span><span class="val"><span class="status-dot ${emb.available ? 'ok' : 'err'}"></span>${emb.available ? 'Available' : 'Not loaded'}</span></div>
+      <div class="status-row"><span class="key">Type</span><span class="val">${esc(emb.type || '—')}</span></div>
+      <div class="status-row"><span class="key">Runtime</span><span class="val">${esc(emb.runtime || '—')}</span></div>
+      <div class="status-row"><span class="key">Dimension</span><span class="val">${emb.dimension ?? '—'}</span></div>
+      <div style="margin-top:12px">
+        <button class="btn btn-accent" onclick="testEmbedding()" id="btn-test-emb">Test Embedding</button>
+        <span id="emb-test-result"></span>
+      </div>`;
 
-  // LLM status
-  const llm = d.llm || {};
-  const llmOk = llm.configured;
-document.getElementById('models-llm-status').innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
-      <div><span style="color:var(--text-dim)">Status:</span> ${llmOk ? '✅ Ready' : '❌ Not configured'}</div>
-      <div><span style="color:var(--text-dim)">API Key:</span> ${llm.hasApiKey ? '✅ Configured' : '❌ Not set'}</div>
-      <div><span style="color:var(--text-dim)">Model:</span> <code>${esc(llm.model || '—')}</code></div>
-      <div><span style="color:var(--text-dim)">Base URL:</span> <code style="font-size:11px">${esc(llm.baseUrl || '—')}</code></div>
-      <div><span style="color:var(--text-dim)">Source:</span> ${llm.source === 'config.yaml' ? '📁 config.yaml' : llm.source === 'env' ? '🔧 Environment' : '—'}</div>
-      <div><span style="color:var(--text-dim)">Env Vars:</span> <code style="font-size:11px">${(llm.envVars || []).join(', ')}</code></div>
-    </div>
-    <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
-      <button class="btn btn-accent" onclick="testLLM()" id="btn-test-llm">Test LLM</button>
-      <span id="llm-test-result"></span>
-    </div>`;
+    // LLM status
+    const llm = d.llm || {};
+    const llmOk = llm.configured;
+  document.getElementById('models-llm-status').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
+        <div><span style="color:var(--text-dim)">Status:</span> ${llmOk ? '✅ Ready' : '❌ Not configured'}</div>
+        <div><span style="color:var(--text-dim)">API Key:</span> ${llm.hasApiKey ? '✅ Configured' : '❌ Not set'}</div>
+        <div><span style="color:var(--text-dim)">Model:</span> <code>${esc(llm.model || '—')}</code></div>
+        <div><span style="color:var(--text-dim)">Base URL:</span> <code style="font-size:11px">${esc(llm.baseUrl || '—')}</code></div>
+        <div><span style="color:var(--text-dim)">Source:</span> ${llm.source === 'config.yaml' ? '📁 config.yaml' : llm.source === 'env' ? '🔧 Environment' : '—'}</div>
+        <div><span style="color:var(--text-dim)">Env Vars:</span> <code style="font-size:11px">${(llm.envVars || []).join(', ')}</code></div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+        <button class="btn btn-accent" onclick="testLLM()" id="btn-test-llm">Test LLM</button>
+        <span id="llm-test-result"></span>
+      </div>`;
 
-
-
-
-
-
-
-
-
-
-
-  // Storage status
-  const st = d.storage || {};
-  document.getElementById('storage-status').innerHTML = `
-    <div class="status-row"><span class="key">Store Path</span><span class="val" style="font-size:12px;font-family:monospace">${esc(st.storePath || '—')}</span></div>
-    <div class="status-row"><span class="key">Engrams</span><span class="val">${st.engrams ?? '—'}</span></div>
-    <div class="status-row"><span class="key">Observations</span><span class="val">${st.observations ?? '—'}</span></div>
-    <div class="status-row"><span class="key">Mental Models</span><span class="val">${st.mentalModels ?? '—'}</span></div>
-    <div class="status-row"><span class="key">SQLite Cache</span><span class="val"><span class="status-dot ${st.sqliteEnabled ? 'ok' : 'warn'}"></span>${st.sqliteEnabled ? 'Enabled' : 'Disabled'}</span></div>`;
+    // Storage status
+    const st = d.storage || {};
+    document.getElementById('storage-status').innerHTML = `
+      <div class="status-row"><span class="key">Store Path</span><span class="val" style="font-size:12px;font-family:monospace">${esc(st.storePath || '—')}</span></div>
+      <div class="status-row"><span class="key">Engrams</span><span class="val">${st.engrams ?? '—'}</span></div>
+      <div class="status-row"><span class="key">Observations</span><span class="val">${st.observations ?? '—'}</span></div>
+      <div class="status-row"><span class="key">Mental Models</span><span class="val">${st.mentalModels ?? '—'}</span></div>
+      <div class="status-row"><span class="key">SQLite Cache</span><span class="val"><span class="status-dot ${st.sqliteEnabled ? 'ok' : 'warn'}"></span>${st.sqliteEnabled ? 'Enabled' : 'Disabled'}</span></div>`;
+  } catch (e) { showToast('Failed to load models: ' + e.message); }
 }
 
 async function testEmbedding() {
@@ -955,41 +1013,60 @@ async function loadSystemStatus() {
 }
 
 async function loadConfig() {
-  const res = await fetch(API + '/api/config');
-  const d = await res.json();
-  const body = document.getElementById('config-body');
-  body.innerHTML = d.keys.map(k => {
-    const val = d.config[k.key] ?? '';
-    return `<tr>
-      <td><strong>${k.key}</strong><br><span style="color:var(--text-dim);font-size:11px">${k.description}</span></td>
-      <td><input value="${esc(String(val))}" data-key="${k.key}"></td>
-      <td style="color:var(--text-dim)">${k.type}</td>
-      <td><button onclick="saveConfig('${k.key}', this)">Save</button></td>
-    </tr>`;
-  }).join('');
+  try {
+    const res = await fetch(API + '/api/config');
+    const d = await res.json();
+    const body = document.getElementById('config-body');
+    body.innerHTML = d.keys.map(k => {
+      const val = d.config[k.key] ?? '';
+      const inputType = k.type === 'number' ? 'number' : k.type === 'boolean' ? 'checkbox' : 'text';
+      const inputAttrs = k.type === 'boolean'
+        ? (val ? 'checked' : '')
+        : `value="${esc(String(val))}"`;
+      return `<tr>
+        <td><strong>${k.key}</strong><br><span style="color:var(--text-dim);font-size:11px">${k.description}</span></td>
+        <td><input type="${inputType}" ${inputAttrs} data-key="${k.key}" data-type="${k.type}" ${inputType === 'number' ? 'step="any"' : ''}></td>
+        <td style="color:var(--text-dim)">${k.type}</td>
+        <td><button onclick="saveConfig('${k.key}', this)">Save</button></td>
+      </tr>`;
+    }).join('');
+  } catch (e) { showToast('Failed to load config: ' + e.message); }
 }
 
 async function saveConfig(key, btn) {
   const input = btn.closest('tr').querySelector('input');
-  const res = await fetch(API + '/api/config', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ key, value: input.value }),
-  });
-  const d = await res.json();
-  btn.textContent = d.success ? '✓' : '✗';
-  setTimeout(() => btn.textContent = 'Save', 1500);
+  const type = input.dataset.type || 'string';
+  const value = type === 'boolean' ? input.checked : input.value;
+  try {
+    const res = await fetch(API + '/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value: String(value) }),
+    });
+    const d = await res.json();
+    btn.textContent = d.success ? '✓' : '✗';
+    setTimeout(() => btn.textContent = 'Save', 1500);
+  } catch (e) { btn.textContent = '✗'; showToast('Config save failed: ' + e.message); }
 }
 
 async function resetConfig() {
   if (!confirm('Reset all config to defaults?')) return;
-  await fetch(API + '/api/config/reset', { method: 'POST' });
-  loadConfig();
+  try {
+    await fetch(API + '/api/config/reset', { method: 'POST' });
+    loadConfig();
+  } catch (e) { showToast('Config reset failed: ' + e.message); }
 }
 
 // ─── Helpers ────────────────────────────────────────
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function layerLabel(l) { return { raw: 'Engram', observation: 'Observation', mental_model: 'Mental Model', experience: 'Experience' }[l] || l; }
+function showToast(msg, type) {
+  const toast = document.createElement('div');
+  toast.className = 'toast ' + (type || 'error');
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  setTimeout(() => toast.remove(), 4000);
+}
 
 // ─── Init ───────────────────────────────────────────
 loadStats();
