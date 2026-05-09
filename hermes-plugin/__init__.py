@@ -280,6 +280,28 @@ class FlyupMemProvider(MemoryProvider):
                     "required": ["query"],
                 },
             },
+            {
+                "name": "flyup_experiences",
+                "description": "Browse Experience layer memories (L4). Returns Experiences with pattern metadata like occurrence_count and trend.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "status": {"type": "string", "enum": ["all", "active", "candidate", "fading", "dormant", "retired"], "description": "Filter by status. Defaults to 'all'.", "default": "all"},
+                        "limit": {"type": "integer", "description": "Max number of experiences to return.", "default": 50},
+                    },
+                },
+            },
+            {
+                "name": "flyup_experience_detail",
+                "description": "Get detailed Experience by ID with resolved evidence chain (source memories).",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string", "description": "Experience ID (e.g. EXP-20260509-001)"},
+                    },
+                    "required": ["id"],
+                },
+            },
         ]
 
     def handle_tool_call(self, tool_name: str, args: Dict[str, Any], **kwargs) -> str:
@@ -328,6 +350,52 @@ class FlyupMemProvider(MemoryProvider):
                     return json.dumps({"error": "query is required"})
                 result = self._run_cli("reflect", query)
                 return result or '{"reflected": false}'
+
+            elif tool_name == "flyup_experiences":
+                status = args.get("status", "all")
+                limit = args.get("limit", 50)
+                cli_args = ["status", "--json"]
+                result = self._run_cli(*cli_args)
+                # Use direct JSON parsing for experiences since CLI status doesn't return experiences well
+                try:
+                    import subprocess as sp
+                    store_path = self._store_path or os.path.expanduser("~/.flyupmem")
+                    experiences_file = os.path.join(store_path, "experiences.yaml")
+                    if not os.path.exists(experiences_file):
+                        return json.dumps({"experiences": [], "total": 0})
+                    data = yaml.safe_load(open(experiences_file)) or []
+                    if status != "all":
+                        data = [e for e in data if e.get("status") == status]
+                    data.sort(key=lambda e: e.get("last_seen", e.get("temporal", {}).get("learned_at", "")), reverse=True)
+                    return json.dumps({"experiences": data[:limit], "total": len(data)})
+                except Exception as e:
+                    return json.dumps({"error": str(e)})
+
+            elif tool_name == "flyup_experience_detail":
+                exp_id = args.get("id", "")
+                if not exp_id:
+                    return json.dumps({"error": "id is required"})
+                try:
+                    store_path = self._store_path or os.path.expanduser("~/.flyupmem")
+                    experiences_file = os.path.join(store_path, "experiences.yaml")
+                    if not os.path.exists(experiences_file):
+                        return json.dumps({"error": "Experience not found"})
+                    data = yaml.safe_load(open(experiences_file)) or []
+                    exp = next((e for e in data if e.get("id") == exp_id), None)
+                    if not exp:
+                        return json.dumps({"error": "Experience not found"})
+                    # Resolve evidence chain
+                    evidence = []
+                    for source_id in exp.get("source_memory_ids", []):
+                        r = self._run_cli("inspect", source_id, "--json")
+                        if r:
+                            try:
+                                evidence.append(json.loads(r))
+                            except:
+                                pass
+                    return json.dumps({"experience": exp, "evidence": evidence})
+                except Exception as e:
+                    return json.dumps({"error": str(e)})
 
             else:
                 return json.dumps({"error": f"Unknown tool: {tool_name}"})

@@ -275,7 +275,40 @@ const plugin = {
       },
     }, { name: 'flyup_reflect' });
 
-    logger.info?.('[FlyupMem] Plugin registered', { autoLearn: pluginConfig.autoLearn, autoRecall: pluginConfig.autoRecall, tools: 7, hooks: 6 });
+    api.registerTool({
+      name: 'flyup_experiences',
+      label: 'FlyupMem Experiences',
+      description: 'Browse Experience layer memories (L4) with pattern metadata.',
+      parameters: Type.Object({
+        status: Type.Optional(Type.Union([Type.Literal('all'), Type.Literal('active'), Type.Literal('candidate'), Type.Literal('fading'), Type.Literal('dormant'), Type.Literal('retired')])),
+        limit: Type.Optional(Type.Number({ description: 'Max experiences to return.' })),
+      }),
+      execute(_toolCallId, params) {
+        const s = getStore();
+        const status = params.status ?? 'all';
+        const limit = params.limit ?? 50;
+        let experiences = [...s.experiences];
+        if (status !== 'all') experiences = experiences.filter(e => e.status === status);
+        experiences.sort((a, b) => (b.last_seen ?? b.temporal?.learned_at ?? '').localeCompare(a.last_seen ?? a.temporal?.learned_at ?? ''));
+        return jsonResult({ experiences: experiences.slice(0, limit), total: experiences.length });
+      },
+    }, { name: 'flyup_experiences' });
+
+    api.registerTool({
+      name: 'flyup_experience_detail',
+      label: 'FlyupMem Experience Detail',
+      description: 'Get Experience by ID with resolved evidence chain.',
+      parameters: Type.Object({ id: Type.String({ description: 'Experience ID (e.g. EXP-20260509-001).' }) }),
+      execute(_toolCallId, params) {
+        const s = getStore();
+        const exp = s.experiences.find(e => e.id === params.id);
+        if (!exp) return jsonResult({ error: 'Experience not found' });
+        const evidence = exp.source_memory_ids.map(sourceId => s.getById(sourceId)).filter(Boolean);
+        return jsonResult({ experience: exp, evidence });
+      },
+    }, { name: 'flyup_experience_detail' });
+
+    logger.info?.('[FlyupMem] Plugin registered', { autoLearn: pluginConfig.autoLearn, autoRecall: pluginConfig.autoRecall, tools: 9, hooks: 6 });
   },
 };
 

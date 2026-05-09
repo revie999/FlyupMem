@@ -9,6 +9,7 @@ import { flyupRecall, flyupRecallExplain } from '../tools/flyup_recall.js'
 import { flyupFeedback } from '../tools/flyup_feedback.js'
 import { flyupStatus } from '../tools/flyup_status.js'
 import { flyupMaintain } from '../tools/flyup_maintain.js'
+import type { MaintainMode } from '../tools/flyup_maintain.js'
 import { flyupReflect } from '../tools/flyup_reflect.js'
 import { flyupPack } from '../tools/flyup_pack.js'
 import { flyupInspect } from '../tools/flyup_inspect.js'
@@ -156,11 +157,13 @@ function createServer(): McpServer {
   // ─── flyup_maintain ─────────────────────────────────────────
   server.tool(
     'flyup_maintain',
-    'Run maintenance: batch decay, consolidation, graph updates.',
-    {},
-    async () => {
+    'Run maintenance: batch decay, consolidation, graph updates, and optional REM processing.',
+    {
+      mode: z.enum(['light', 'deep', 'rem']).optional().default('light').describe('Maintenance mode. Defaults to light for interactive safety.'),
+    },
+    async ({ mode }) => {
       store.load()
-      const result = await flyupMaintain(store)
+      const result = await flyupMaintain(store, { mode })
       return {
         content: [{
           type: 'text' as const,
@@ -204,6 +207,51 @@ function createServer(): McpServer {
         content: [{
           type: 'text' as const,
           text: result.details,
+        }],
+      }
+    },
+  )
+
+  // ─── flyup_experiences ──────────────────────────────────────
+  server.tool(
+    'flyup_experiences',
+    'Browse Experience layer memories. Returns list of Experiences with pattern metadata.',
+    {
+      status: z.enum(['all', 'active', 'candidate', 'fading', 'dormant', 'retired']).optional().default('all').describe('Filter by status'),
+      limit: z.number().optional().default(50).describe('Max number of experiences to return'),
+    },
+    async ({ status, limit }) => {
+      store.load()
+      let experiences = [...store.experiences]
+      if (status !== 'all') experiences = experiences.filter(e => e.status === status)
+      experiences.sort((a, b) => (b.last_seen ?? b.temporal?.learned_at ?? '').localeCompare(a.last_seen ?? a.temporal?.learned_at ?? ''))
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ experiences: experiences.slice(0, limit), total: experiences.length }, null, 2),
+        }],
+      }
+    },
+  )
+
+  // ─── flyup_experience_detail ────────────────────────────────
+  server.tool(
+    'flyup_experience_detail',
+    'Get detailed Experience by ID with resolved evidence chain (source memories).',
+    {
+      id: z.string().describe('Experience ID (e.g. EXP-20260509-001)'),
+    },
+    async ({ id }) => {
+      store.load()
+      const exp = store.experiences.find(e => e.id === id)
+      if (!exp) {
+        return { content: [{ type: 'text' as const, text: JSON.stringify({ error: 'Experience not found' }) }] }
+      }
+      const evidence = exp.source_memory_ids.map(sourceId => store.getById(sourceId)).filter(Boolean)
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({ experience: exp, evidence }, null, 2),
         }],
       }
     },
