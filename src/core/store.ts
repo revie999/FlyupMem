@@ -15,6 +15,7 @@ import {
   EpisodeSchema, GraphDataSchema, FeedbackEntrySchema,
 } from './schema.js'
 import { SQLiteCache } from './sqlite-cache.js'
+import { WriteQueue } from './write-queue.js'
 
 function expandHome(p: string): string {
   return p.replace(/^~/, os.homedir())
@@ -187,6 +188,7 @@ function mergeBySnapshot<T extends { id: string }>(
 export class FlyupMemStore {
   readonly basePath: string
   readonly config: FlyupMemConfig
+  private readonly _writeQueue = new WriteQueue()
   readonly cache: SQLiteCache
 
   private _engrams: Engram[] = []
@@ -338,6 +340,21 @@ export class FlyupMemStore {
     } finally {
       release()
     }
+  }
+
+  /** Async save — enqueues the write and returns a promise. Does not block the caller. */
+  saveAsync(): Promise<void> {
+    return this._writeQueue.enqueue(() => this.save())
+  }
+
+  /** Wait for all pending async writes to complete. Call before process exit. */
+  async shutdown(): Promise<void> {
+    await this._writeQueue.drain()
+  }
+
+  /** Number of pending async write operations. */
+  get pendingWrites(): number {
+    return this._writeQueue.pending
   }
 
   private writeAll(): void {
