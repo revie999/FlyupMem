@@ -60,12 +60,25 @@ export class WriteQueue {
 
     try {
       await entry.fn()
-      entry.resolve()
     } catch (err) {
       entry.reject(err instanceof Error ? err : new Error(String(err)))
+      // Still process next even after error
+      queueMicrotask(() => this.processNext())
+      return
     }
 
-    // Process next (use microtask to avoid stack overflow on long queues)
-    queueMicrotask(() => this.processNext())
+    // Check if more work exists BEFORE resolving the caller,
+    // so that `pending` reads 0 when the caller's `await` resumes.
+    if (this.queue.length === 0) {
+      this.running = false
+      const resolvers = this.drainResolvers.splice(0)
+      entry.resolve()
+      for (const resolve of resolvers) {
+        resolve()
+      }
+    } else {
+      entry.resolve()
+      queueMicrotask(() => this.processNext())
+    }
   }
 }
