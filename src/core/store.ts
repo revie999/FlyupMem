@@ -5,13 +5,13 @@ import * as path from 'node:path'
 import * as os from 'node:os'
 import * as yaml from 'js-yaml'
 import type {
-  Engram, Observation, MentalModel, Episode,
+  Engram, Observation, MentalModel, Experience, Episode,
   GraphData, FeedbackEntry, Memory, FlyupMemConfig, Activation,
 } from './types.js'
 import { DEFAULT_CONFIG } from './types.js'
 import { generateEpisodeId } from './id.js'
 import {
-  EngramSchema, ObservationSchema, MentalModelSchema,
+  EngramSchema, ObservationSchema, MentalModelSchema, ExperienceSchema,
   EpisodeSchema, GraphDataSchema, FeedbackEntrySchema,
 } from './schema.js'
 import { SQLiteCache } from './sqlite-cache.js'
@@ -194,6 +194,7 @@ export class FlyupMemStore {
   private _engrams: Engram[] = []
   private _observations: Observation[] = []
   private _mentalModels: MentalModel[] = []
+  private _experiences: Experience[] = []
   private _episodes: Episode[] = []
   private _graph: GraphData = { entities: {}, edges: [] }
   private _feedback: FeedbackEntry[] = []
@@ -202,6 +203,7 @@ export class FlyupMemStore {
     engrams: new Map<string, string>(),
     observations: new Map<string, string>(),
     mentalModels: new Map<string, string>(),
+    experiences: new Map<string, string>(),
     episodes: new Map<string, string>(),
     feedback: new Map<string, string>(),
     graph: '',
@@ -236,6 +238,7 @@ export class FlyupMemStore {
       engramChunks: path.join(base, 'engrams.d'),
       observations: path.join(base, 'observations.yaml'),
       mentalModels: path.join(base, 'mental-models.yaml'),
+      experiences: path.join(base, 'experiences.yaml'),
       episodes: path.join(base, 'episodes.yaml'),
       graph: path.join(base, 'graph.yaml'),
       feedback: path.join(base, 'feedback.yaml'),
@@ -306,6 +309,7 @@ export class FlyupMemStore {
     this._engrams = this.loadEngrams()
     this._observations = this.loadYaml<Observation>(this.paths.observations, ObservationSchema)
     this._mentalModels = this.loadYaml<MentalModel>(this.paths.mentalModels, MentalModelSchema)
+    this._experiences = this.loadYaml<Experience>(this.paths.experiences, ExperienceSchema)
     this._episodes = this.loadYaml<Episode>(this.paths.episodes, EpisodeSchema)
     this._graph = this.loadYamlOne<GraphData>(this.paths.graph, GraphDataSchema) ?? { entities: {}, edges: [] }
     this._feedback = this.loadYaml<FeedbackEntry>(this.paths.feedback, FeedbackEntrySchema)
@@ -362,6 +366,7 @@ export class FlyupMemStore {
     this.writeEngrams()
     atomicWriteSync(p.observations, yaml.dump(this._observations, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.mentalModels, yaml.dump(this._mentalModels, { lineWidth: 120, noRefs: true }))
+    atomicWriteSync(p.experiences, yaml.dump(this._experiences, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.episodes, yaml.dump(this._episodes, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.graph, yaml.dump(this._graph, { lineWidth: 120, noRefs: true }))
     atomicWriteSync(p.feedback, yaml.dump(this._feedback, { lineWidth: 120, noRefs: true }))
@@ -400,6 +405,7 @@ export class FlyupMemStore {
     this._snapshots.engrams = new Map(this._engrams.map(item => [item.id, stableJson(item)]))
     this._snapshots.observations = new Map(this._observations.map(item => [item.id, stableJson(item)]))
     this._snapshots.mentalModels = new Map(this._mentalModels.map(item => [item.id, stableJson(item)]))
+    this._snapshots.experiences = new Map(this._experiences.map(item => [item.id, stableJson(item)]))
     this._snapshots.episodes = new Map(this._episodes.map(item => [item.id, stableJson(item)]))
     this._snapshots.feedback = new Map(this._feedback.map(item => [item.id, stableJson(item)]))
     this._snapshots.graph = stableJson(this._graph)
@@ -409,6 +415,7 @@ export class FlyupMemStore {
     const latestEngrams = this.loadEngrams()
     const latestObservations = this.loadYaml<Observation>(this.paths.observations, ObservationSchema)
     const latestMentalModels = this.loadYaml<MentalModel>(this.paths.mentalModels, MentalModelSchema)
+    const latestExperiences = this.loadYaml<Experience>(this.paths.experiences, ExperienceSchema)
     const latestEpisodes = this.loadYaml<Episode>(this.paths.episodes, EpisodeSchema)
     const latestFeedback = this.loadYaml<FeedbackEntry>(this.paths.feedback, FeedbackEntrySchema)
     const latestGraph = this.loadYamlOne<GraphData>(this.paths.graph, GraphDataSchema) ?? { entities: {}, edges: [] }
@@ -416,6 +423,7 @@ export class FlyupMemStore {
     this._engrams = mergeBySnapshot(latestEngrams, this._engrams, this._snapshots.engrams)
     this._observations = mergeBySnapshot(latestObservations, this._observations, this._snapshots.observations)
     this._mentalModels = mergeBySnapshot(latestMentalModels, this._mentalModels, this._snapshots.mentalModels)
+    this._experiences = mergeBySnapshot(latestExperiences, this._experiences, this._snapshots.experiences)
     this._episodes = mergeBySnapshot(latestEpisodes, this._episodes, this._snapshots.episodes)
     this._feedback = mergeBySnapshot(latestFeedback, this._feedback, this._snapshots.feedback)
     this._graph = this._snapshots.graph === stableJson(this._graph) ? latestGraph : this._graph
@@ -425,12 +433,14 @@ export class FlyupMemStore {
   get engrams(): Engram[] { return this._engrams }
   get observations(): Observation[] { return this._observations }
   get mentalModels(): MentalModel[] { return this._mentalModels }
+  get experiences(): Experience[] { return this._experiences }
   get episodes(): Episode[] { return this._episodes }
   get graph(): GraphData { return this._graph }
   get feedback(): FeedbackEntry[] { return this._feedback }
 
   allMemories(): Memory[] {
     return [
+      ...this._experiences,
       ...this._mentalModels,
       ...this._observations,
       ...this._engrams,
@@ -514,6 +524,21 @@ export class FlyupMemStore {
   removeMentalModel(id: string): void {
     this._mentalModels = this._mentalModels.filter(m => m.id !== id)
     this.cache.removeItem(id)
+  }
+
+  addExperience(exp: Experience): void {
+    this._experiences.push(exp)
+  }
+
+  updateExperience(id: string, updates: Partial<Experience>): void {
+    const idx = this._experiences.findIndex(e => e.id === id)
+    if (idx >= 0) {
+      this._experiences[idx] = { ...this._experiences[idx], ...updates }
+    }
+  }
+
+  removeExperience(id: string): void {
+    this._experiences = this._experiences.filter(e => e.id !== id)
   }
 
   addEpisode(ep: Episode): void {
@@ -638,6 +663,7 @@ export class FlyupMemStore {
       },
       observations: this._observations.length,
       mentalModels: this._mentalModels.length,
+      experiences: this._experiences.length,
       episodes: this._episodes.length,
       graphEntities: Object.keys(this._graph.entities).length,
       graphEdges: this._graph.edges.length,
