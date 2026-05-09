@@ -7,7 +7,13 @@ import * as path from 'node:path'
 import * as yaml from 'js-yaml'
 import { FlyupMemStore } from '../core/store.js'
 import { configShow, configSet, configReset, configKeys } from '../tools/flyup_config.js'
+import { flyupMaintain, type MaintainMode } from '../tools/flyup_maintain.js'
+import { flyupReflect } from '../tools/flyup_reflect.js'
+import { recallWithExplanation } from '../search/recall.js'
 import { computeActivation } from '../lifecycle/decay.js'
+import { generateId, nextSequence } from '../core/id.js'
+import { contentHash } from '../core/hash.js'
+import type { Engram } from '../core/types.js'
 
 export interface DashboardOptions {
   port?: number
@@ -19,7 +25,7 @@ const DEFAULT_PORT = 7860
 const DEFAULT_HOST = '127.0.0.1'
 
 function json(res: http.ServerResponse, data: unknown, status = 200): void {
-  res.writeHead(status, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
+  res.writeHead(status, { 'Content-Type': 'application/json' })
   res.end(JSON.stringify(data))
 }
 
@@ -32,6 +38,26 @@ function error(res: http.ServerResponse, message: string, status = 400): void {
   json(res, { error: message }, status)
 }
 
+function isMutation(method: string | undefined): boolean {
+  return method !== undefined && !['GET', 'HEAD', 'OPTIONS'].includes(method)
+}
+
+function isAllowedOrigin(req: http.IncomingMessage): boolean {
+  const origin = req.headers.origin
+  if (!origin) return true
+  try {
+    const originUrl = new URL(origin)
+    return originUrl.host === req.headers.host
+  } catch {
+    return false
+  }
+}
+
+function isJsonRequest(req: http.IncomingMessage): boolean {
+  const contentType = req.headers['content-type']
+  return typeof contentType === 'string' && contentType.toLowerCase().includes('application/json')
+}
+
 function parseBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
     let body = ''
@@ -40,6 +66,54 @@ function parseBody(req: http.IncomingMessage): Promise<Record<string, unknown>> 
       try { resolve(JSON.parse(body)) } catch { resolve({}) }
     })
   })
+}
+
+function stringArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean)
+  if (typeof value === 'string') return value.split(',').map(s => s.trim()).filter(Boolean)
+  return []
+}
+
+function finiteNumber(value: unknown, fallback: number, min: number, max: number): number {
+  const n = Number(value ?? fallback)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(max, Math.max(min, n))
+}
+
+function createManualEngram(body: Record<string, unknown>, existingIds: string[]): Engram {
+  const now = new Date().toISOString()
+  const today = now.slice(0, 10)
+  const statement = String(body.statement ?? '').trim()
+  return {
+    id: generateId('raw', nextSequence(existingIds, 'raw')),
+    version: 1,
+    layer: 'raw',
+    status: (body.status === 'candidate' || body.status === 'locked') ? body.status : 'active',
+    consolidated: false,
+    type: (['behavioral', 'terminological', 'procedural', 'architectural'].includes(String(body.type))) ? body.type as Engram['type'] : 'procedural',
+    memory_class: (['semantic', 'episodic', 'procedural', 'metacognitive'].includes(String(body.memory_class))) ? body.memory_class as Engram['memory_class'] : 'semantic',
+    polarity: body.polarity === 'dont' ? 'dont' : body.polarity === 'do' ? 'do' : null,
+    commitment: (['exploring', 'leaning', 'decided', 'locked'].includes(String(body.commitment))) ? body.commitment as Engram['commitment'] : 'decided',
+    scope: String(body.scope ?? 'global'),
+    visibility: String(body.visibility ?? 'private'),
+    domain: String(body.domain ?? 'manual'),
+    tags: stringArray(body.tags),
+    statement,
+    rationale: String(body.rationale ?? ''),
+    contraindications: stringArray(body.contraindications),
+    entities: [],
+    temporal: { learned_at: now, valid_from: now, valid_until: null },
+    source: { episode_id: null, quote: statement, origin: 'dashboard:manual' },
+    activation: { retrieval_strength: 0.8, storage_strength: 1.0, frequency: 1, turn_count: 0, last_accessed: today },
+    emotional_weight: finiteNumber(body.emotional_weight, 5, 1, 10),
+    confidence: finiteNumber(body.confidence, 7, 1, 10),
+    content_hash: contentHash(statement),
+    associations: [],
+    feedback: { positive: 0, negative: 0, neutral: 0 },
+    previous_version_ref: null,
+    adoption_count: 0,
+    derivation_count: 1,
+  }
 }
 
 export function createDashboardServer(options: DashboardOptions = {}): http.Server {
@@ -52,6 +126,11 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
     const route = `${req.method} ${url.pathname}`
 
     try {
+      if (isMutation(req.method)) {
+        if (!isAllowedOrigin(req)) return error(res, 'Forbidden origin', 403)
+        if (!isJsonRequest(req)) return error(res, 'Mutation endpoints require application/json', 415)
+      }
+
       // ─── Dashboard HTML ───────────────────────────────
       if (route === 'GET /' || route === 'GET /dashboard') {
         // Try dist/web first (compiled), then src/web (source)
@@ -77,6 +156,7 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
           engrams: store.engrams.length,
           observations: store.observations.length,
           mentalModels: store.mentalModels.length,
+          experiences: store.experiences.length,
           episodes: store.episodes.length,
           total: all.length,
           graph: {
@@ -145,7 +225,23 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
         const store = new FlyupMemStore({ store_path: storePath })
         store.load()
         const q = url.searchParams.get('q') ?? ''
-        if (!q) return json(res, { results: [], query: '' })
+        if (!q) return json(res, { results: [], query: '', mode: 'keyword', total: 0 })
+
+        const mode = url.searchParams.get('mode') ?? 'keyword'
+        const explain = url.searchParams.get('explain') === 'true'
+        const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') ?? '30', 10)))
+
+        if (mode === 'semantic' || mode === 'hybrid') {
+          const result = await recallWithExplanation(q, store, 4096, url.searchParams.get('scope'))
+          return json(res, {
+            results: result.memories.slice(0, limit),
+            query: q,
+            mode: 'hybrid',
+            total: result.memories.length,
+            diagnostics: result.diagnostics,
+            explanations: explain ? result.explanations : undefined,
+          })
+        }
 
         const lower = q.toLowerCase()
         const results = store.allMemories().filter(m => {
@@ -155,7 +251,29 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
           return text.toLowerCase().includes(lower)
         })
 
-        return json(res, { results: results.slice(0, 30), query: q, total: results.length })
+        return json(res, { results: results.slice(0, limit), query: q, mode: 'keyword', total: results.length })
+      }
+
+      // ─── API: Experience browser ──────────────────────
+      if (route === 'GET /api/experiences') {
+        const store = new FlyupMemStore({ store_path: storePath })
+        store.load()
+        const status = url.searchParams.get('status') ?? 'all'
+        const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') ?? '50', 10)))
+        let experiences = [...store.experiences]
+        if (status !== 'all') experiences = experiences.filter(e => e.status === status)
+        experiences.sort((a, b) => (b.last_seen ?? b.temporal?.learned_at ?? '').localeCompare(a.last_seen ?? a.temporal?.learned_at ?? ''))
+        return json(res, { experiences: experiences.slice(0, limit), total: experiences.length })
+      }
+
+      if (route === 'GET /api/experience' && url.searchParams.get('id')) {
+        const store = new FlyupMemStore({ store_path: storePath })
+        store.load()
+        const id = url.searchParams.get('id')!
+        const exp = store.experiences.find(e => e.id === id)
+        if (!exp) return error(res, 'Experience not found', 404)
+        const evidence = exp.source_memory_ids.map(sourceId => store.getById(sourceId)).filter(Boolean)
+        return json(res, { experience: exp, evidence })
       }
 
       // ─── API: Graph data ──────────────────────────────
@@ -179,6 +297,22 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
         return json(res, { nodes, edges })
       }
 
+      // ─── API: Create memory ───────────────────────────
+      if (route === 'POST /api/memory') {
+        const store = new FlyupMemStore({ store_path: storePath })
+        store.load()
+        const body = await parseBody(req)
+        const statement = String(body.statement ?? '').trim()
+        if (!statement) return error(res, 'Missing statement')
+        const layer = String(body.layer ?? 'raw')
+        if (layer !== 'raw') return error(res, 'Manual creation currently supports layer="raw" only')
+
+        const engram = createManualEngram(body, store.engrams.map(e => e.id))
+        store.addEngram(engram)
+        store.save()
+        return json(res, { success: true, memory: engram }, 201)
+      }
+
       // ─── API: Update memory ──────────────────────────────
       if (route === 'PUT /api/memory' || route === 'PATCH /api/memory') {
         const store = new FlyupMemStore({ store_path: storePath })
@@ -191,9 +325,17 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
         if (!mem) return error(res, 'Memory not found', 404)
 
         // Update allowed fields
-        const fields = ['statement', 'title', 'rationale', 'scope', 'domain', 'tags', 'confidence', 'status']
+        const fields = ['statement', 'title', 'rationale', 'scope', 'domain', 'tags', 'status']
         for (const f of fields) {
           if (body[f] !== undefined) (mem as any)[f] = body[f]
+        }
+        if (body.confidence !== undefined) {
+          const current = Number((mem as any).confidence ?? 7)
+          ;(mem as any).confidence = finiteNumber(body.confidence, Number.isFinite(current) ? current : 7, 1, 10)
+        }
+        if (body.emotional_weight !== undefined) {
+          const current = Number((mem as any).emotional_weight ?? 5)
+          ;(mem as any).emotional_weight = finiteNumber(body.emotional_weight, Number.isFinite(current) ? current : 5, 1, 10)
         }
         store.save()
         return json(res, { success: true, memory: mem })
@@ -212,6 +354,7 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
         const layer = (mem as any).layer
         if (layer === 'observation') store.removeObservation(id)
         else if (layer === 'mental_model') store.removeMentalModel(id)
+        else if (layer === 'experience') store.removeExperience(id)
         else store.removeEngram(id)
         store.save()
         return json(res, { success: true, deleted: id })
@@ -234,6 +377,7 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
             const layer = (mem as any).layer
             if (layer === 'observation') store.removeObservation(id)
             else if (layer === 'mental_model') store.removeMentalModel(id)
+            else if (layer === 'experience') store.removeExperience(id)
             else store.removeEngram(id)
             affected++
           } else if (action === 'retire') {
@@ -305,6 +449,7 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
             engrams: store.engrams.length,
             observations: store.observations.length,
             mentalModels: store.mentalModels.length,
+            experiences: store.experiences.length,
             sqliteEnabled: store.config.sqlite_enabled ?? true,
           }
         } catch {
@@ -374,6 +519,26 @@ export function createDashboardServer(options: DashboardOptions = {}): http.Serv
         }
 
         return error(res, 'Invalid target. Use "embedding" or "llm"')
+      }
+
+      // ─── API: Run maintenance ─────────────────────────
+      if (route === 'POST /api/maintain') {
+        const store = new FlyupMemStore({ store_path: storePath })
+        const body = await parseBody(req)
+        const mode = String(body.mode ?? 'light') as MaintainMode
+        if (!['light', 'deep', 'rem'].includes(mode)) return error(res, 'Invalid mode. Use light, deep, or rem')
+        const result = await flyupMaintain(store, { mode })
+        return json(res, { success: true, result })
+      }
+
+      // ─── API: Run reflect ─────────────────────────────
+      if (route === 'POST /api/reflect') {
+        const store = new FlyupMemStore({ store_path: storePath })
+        const body = await parseBody(req)
+        const query = String(body.query ?? '').trim()
+        if (!query) return error(res, 'Missing query')
+        const result = await flyupReflect(query, store)
+        return json(res, result, result.success ? 200 : 400)
       }
 
       // ─── API: Config ──────────────────────────────────

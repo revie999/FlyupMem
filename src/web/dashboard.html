@@ -119,8 +119,20 @@ textarea.edit-field{min-height:60px;resize:vertical}
   <div id="page-memories" class="show">
     <div class="search-box">
       <input id="search-input" placeholder="Search memories..." onkeydown="if(event.key==='Enter')doSearch()">
+      <select id="search-mode" style="width:auto;min-width:140px">
+        <option value="keyword">Keyword</option>
+        <option value="hybrid">Hybrid / Semantic</option>
+      </select>
       <button onclick="doSearch()">Search</button>
     </div>
+    <div class="filters">
+      <button class="btn btn-accent" onclick="showCreatePanel()">+ Create Memory</button>
+      <button class="btn" onclick="runMaintain('light', this)">Maintain Light</button>
+      <button class="btn" onclick="runMaintain('deep', this)">Maintain Deep</button>
+      <button class="btn" onclick="showReflectPanel()">Reflect</button>
+      <button class="btn" onclick="loadExperiences()">Browse Experiences</button>
+    </div>
+    <div class="detail" id="action-panel"></div>
     <div class="filters">
       <select id="filter-layer" onchange="loadMemories()">
         <option value="all">All Layers</option>
@@ -264,11 +276,19 @@ async function loadMemories() {
 async function doSearch() {
   const q = document.getElementById('search-input').value.trim();
   if (!q) return loadMemories();
-  const res = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}`);
+  const mode = document.getElementById('search-mode').value;
+  const res = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}&mode=${encodeURIComponent(mode)}&limit=50`);
   const d = await res.json();
   selectedIds.clear();
   updateBatchBar();
   renderList(d.results);
+  if (d.diagnostics) {
+    const panel = document.getElementById('action-panel');
+    panel.innerHTML = `<div class="panel"><div class="panel-body">
+      <strong>Search diagnostics</strong> · mode: ${esc(d.mode)} · semantic: ${d.diagnostics.semantic_available ? 'available' : 'unavailable'} · results: ${d.total}
+    </div></div>`;
+    panel.classList.add('show');
+  }
 }
 
 function renderList(memories) {
@@ -340,20 +360,25 @@ async function batchAction(action) {
 
 // ─── Detail / Edit ──────────────────────────────────
 async function showDetail(id) {
-  const res = await fetch(`${API}/api/memory?id=${encodeURIComponent(id)}`);
+  const isExperience = id.startsWith('EXP-');
+  const url = isExperience ? `${API}/api/experience?id=${encodeURIComponent(id)}` : `${API}/api/memory?id=${encodeURIComponent(id)}`;
+  const res = await fetch(url);
   const d = await res.json();
-  const m = d.memory;
-  renderDetail(m, d.currentActivation, d.related, false);
+  const m = d.memory || d.experience;
+  renderDetail(m, d.currentActivation, d.related, false, d.evidence);
 }
 
-function renderDetail(m, activation, related, editing) {
+function renderDetail(m, activation, related, editing, evidenceChain) {
   const el = document.getElementById('detail');
   const title = m.title || m.statement?.slice(0, 100) || m.id;
 
   let extra = '';
-  if (m.source_observation_ids?.length) extra += `<div class="field"><span class="key">Source Observations</span><div class="val">${m.source_observation_ids.join(', ')}</div></div>`;
-  if (m.evidence?.length) extra += `<div class="field"><span class="key">Evidence (${m.evidence.length})</span><div class="val">${m.evidence.map(e => e.quote || e.engram_id).join(' | ')}</div></div>`;
-  if (m.associations?.length) extra += `<div class="field"><span class="key">Associations</span><div class="val">${m.associations.map(a => `${a.target} (${a.type}, ${a.weight})`).join(', ')}</div></div>`;
+  if (m.source_observation_ids?.length) extra += `<div class="field"><span class="key">Source Observations</span><div class="val">${m.source_observation_ids.map(esc).join(', ')}</div></div>`;
+  if (m.source_memory_ids?.length) extra += `<div class="field"><span class="key">Source Memories</span><div class="val">${m.source_memory_ids.map(esc).join(', ')}</div></div>`;
+  if (m.evidence_summary) extra += `<div class="field"><span class="key">Evidence Summary</span><div class="val">${esc(m.evidence_summary)}</div></div>`;
+  if (evidenceChain?.length) extra += `<div class="field"><span class="key">Evidence Chain (${evidenceChain.length})</span><div class="val">${evidenceChain.map(e => `<div><code>${esc(e.id)}</code> — ${esc(e.title || e.statement || '')}</div>`).join('')}</div></div>`;
+  if (m.evidence?.length) extra += `<div class="field"><span class="key">Evidence (${m.evidence.length})</span><div class="val">${m.evidence.map(e => esc(e.quote || e.engram_id)).join(' | ')}</div></div>`;
+  if (m.associations?.length) extra += `<div class="field"><span class="key">Associations</span><div class="val">${m.associations.map(a => `${esc(a.target)} (${esc(a.type)}, ${a.weight})`).join(', ')}</div></div>`;
   if (related?.length) extra += `<div class="field"><span class="key">Graph Relations (${related.length})</span><div class="val">${related.map(r => `${r.target} [${r.type}]`).join(', ')}</div></div>`;
 
   if (editing) {
@@ -456,6 +481,105 @@ async function deleteMemory(id) {
   } else {
     alert('Delete failed: ' + (d.error || 'unknown error'));
   }
+}
+
+// ─── Management Actions ─────────────────────────────
+function showCreatePanel() {
+  const panel = document.getElementById('action-panel');
+  panel.innerHTML = `<div class="panel"><div class="panel-body">
+    <h3>Create Manual Engram</h3>
+    <div class="field"><span class="key">Statement</span><textarea id="create-statement" placeholder="Memory statement"></textarea></div>
+    <div class="field"><span class="key">Scope</span><input id="create-scope" value="global"></div>
+    <div class="field"><span class="key">Domain</span><input id="create-domain" value="manual"></div>
+    <div class="field"><span class="key">Tags</span><input id="create-tags" placeholder="comma,separated,tags"></div>
+    <div class="actions">
+      <button class="btn btn-accent" onclick="createMemory(this)">Create</button>
+      <button class="btn" onclick="document.getElementById('action-panel').classList.remove('show')">Cancel</button>
+    </div>
+  </div></div>`;
+  panel.classList.add('show');
+}
+
+async function createMemory(btn) {
+  const body = {
+    layer: 'raw',
+    statement: document.getElementById('create-statement').value.trim(),
+    scope: document.getElementById('create-scope').value.trim() || 'global',
+    domain: document.getElementById('create-domain').value.trim() || 'manual',
+    tags: document.getElementById('create-tags').value.split(',').map(s => s.trim()).filter(Boolean),
+  };
+  if (!body.statement) return alert('Statement is required');
+  btn.disabled = true; btn.textContent = 'Creating...';
+  const res = await fetch(API + '/api/memory', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const d = await res.json();
+  btn.disabled = false; btn.textContent = 'Create';
+  if (!d.success) return alert('Create failed: ' + (d.error || 'unknown error'));
+  document.getElementById('action-panel').classList.remove('show');
+  loadStats(); loadMemories(); showDetail(d.memory.id);
+}
+
+async function runMaintain(mode, btn) {
+  if ((mode === 'deep' || mode === 'rem') && !confirm(`Run ${mode} maintenance now?`)) return;
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Running...';
+  const res = await fetch(API + '/api/maintain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode }) });
+  const d = await res.json();
+  btn.disabled = false; btn.textContent = old;
+  const panel = document.getElementById('action-panel');
+  if (!d.success) {
+    panel.innerHTML = `<div class="panel"><div class="panel-body" style="color:var(--red)">Maintain failed: ${esc(d.error || 'unknown error')}</div></div>`;
+  } else {
+    const r = d.result;
+    panel.innerHTML = `<div class="panel"><div class="panel-body">
+      <h3>Maintenance complete: ${esc(r.mode)}</h3>
+      <div>Decay: ${r.decay.processed} processed, ${r.decay.statusChanges} status changes</div>
+      <div>Consolidation: ${r.consolidation.merged} merged, ${r.consolidation.updated} updated, ${r.consolidation.conflicts} conflicts</div>
+      <div>Experience: ${r.experience.created} created, ${r.experience.candidates} candidates, ${r.experience.skipped} skipped</div>
+      <div>Graph: ${r.graph.processed} processed</div>
+    </div></div>`;
+    loadStats(); loadMemories();
+  }
+  panel.classList.add('show');
+}
+
+function showReflectPanel() {
+  const panel = document.getElementById('action-panel');
+  panel.innerHTML = `<div class="panel"><div class="panel-body">
+    <h3>Reflect into Mental Model</h3>
+    <div class="field"><span class="key">Query</span><input id="reflect-query" placeholder="Topic to synthesize"></div>
+    <div class="actions">
+      <button class="btn btn-accent" onclick="runReflect(this)">Reflect</button>
+      <button class="btn" onclick="document.getElementById('action-panel').classList.remove('show')">Cancel</button>
+    </div>
+  </div></div>`;
+  panel.classList.add('show');
+}
+
+async function runReflect(btn) {
+  const query = document.getElementById('reflect-query').value.trim();
+  if (!query) return alert('Query is required');
+  btn.disabled = true; btn.textContent = 'Reflecting...';
+  const res = await fetch(API + '/api/reflect', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
+  const d = await res.json();
+  btn.disabled = false; btn.textContent = 'Reflect';
+  const panel = document.getElementById('action-panel');
+  if (!d.success) {
+    panel.innerHTML = `<div class="panel"><div class="panel-body" style="color:var(--red)">Reflect failed: ${esc(d.error || 'unknown error')}</div></div>`;
+  } else {
+    panel.innerHTML = `<div class="panel"><div class="panel-body"><h3>Reflect complete</h3><pre>${esc(JSON.stringify(d, null, 2))}</pre></div></div>`;
+    loadStats(); loadMemories();
+  }
+  panel.classList.add('show');
+}
+
+async function loadExperiences() {
+  const res = await fetch(API + '/api/experiences?limit=50');
+  const d = await res.json();
+  selectedIds.clear(); updateBatchBar();
+  renderList(d.experiences || []);
+  const panel = document.getElementById('action-panel');
+  panel.innerHTML = `<div class="panel"><div class="panel-body"><strong>Experience browser</strong> · ${d.total || 0} total · click an Experience for evidence chain.</div></div>`;
+  panel.classList.add('show');
 }
 
 // ─── Graph (Interactive) ────────────────────────────
