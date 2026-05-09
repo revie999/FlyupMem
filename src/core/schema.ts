@@ -155,6 +155,40 @@ export const MentalModelSchema = z.object({
   temporal: TemporalSchema,
 })
 
+// ─── Experience (L4) ──────────────────────────────────────────
+export const ExperienceSchema = z.object({
+  id: z.string(),
+  layer: z.literal('experience'),
+  status: StatusSchema,
+  scope: z.string(),
+  domain: z.string(),
+  tags: z.array(z.string()),
+  title: z.string(),
+  statement: z.string(),
+
+  source_memory_ids: z.array(z.string()),
+  evidence_summary: z.string(),
+
+  pattern_type: z.enum(['recurring', 'workflow', 'preference', 'cause_effect', 'correlation']),
+  occurrence_count: z.number().int().min(1),
+  first_seen: z.string(),
+  last_seen: z.string(),
+
+  confidence: z.number().int().min(1).max(10),
+  trend: TrendSchema,
+
+  activation: ActivationSchema,
+  emotional_weight: z.number().int().min(1).max(10),
+  entities: z.array(EntitySchema),
+  temporal: TemporalSchema,
+
+  history: z.array(z.object({
+    event: z.string(),
+    at: z.string(),
+    from: z.array(z.string()),
+  })),
+})
+
 // ─── Episode ───────────────────────────────────────────────────
 export const EpisodeSchema = z.object({
   id: z.string(),
@@ -199,4 +233,5 @@ export const MemorySchema = z.discriminatedUnion('layer', [
   EngramSchema,
   ObservationSchema,
   MentalModelSchema,
+  ExperienceSchema,
 ])

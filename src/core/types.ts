@@ -189,6 +189,47 @@ export interface MentalModel {
   temporal: Temporal
 }
 
+// ─── Experience (L4) ──────────────────────────────────────────
+export interface Experience {
+  id: string
+  layer: 'experience'
+  status: Status
+  scope: string
+  domain: string
+  tags: string[]
+  title: string                  // concise label, e.g. "Python debugging workflow"
+  statement: string              // synthesized insight
+
+  // Evidence chain — which lower-layer memories contributed
+  source_memory_ids: string[]    // IDs of Engrams / Observations / MentalModels
+  evidence_summary: string       // LLM-generated summary of supporting evidence
+
+  // Pattern metadata
+  pattern_type: 'recurring' | 'workflow' | 'preference' | 'cause_effect' | 'correlation'
+  occurrence_count: number       // how many times this pattern was observed
+  first_seen: string             // ISO datetime
+  last_seen: string              // ISO datetime
+
+  // Quality
+  confidence: number             // 1-10
+  trend: 'new' | 'strengthening' | 'stable' | 'weakening' | 'stale'
+
+  // ACT-R
+  activation: Activation
+  emotional_weight: number       // 1-10
+
+  // Entities & temporal
+  entities: Entity[]
+  temporal: Temporal
+
+  // History
+  history: Array<{
+    event: string
+    at: string
+    from: string[]
+  }>
+}
+
 // ─── Episode ───────────────────────────────────────────────────
 export interface Episode {
   id: string
@@ -220,7 +261,7 @@ export interface GraphData {
 }
 
 // ─── Union type ────────────────────────────────────────────────
-export type Memory = Engram | Observation | MentalModel
+export type Memory = Engram | Observation | MentalModel | Experience
 
 // ─── Scored result ─────────────────────────────────────────────
 export interface ScoredResult {
