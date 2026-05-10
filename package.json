@@ -10,7 +10,7 @@
     "flyupmem-mcp": "dist/mcp/entry.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"const fs=require('node:fs');fs.mkdirSync('dist/web',{recursive:true});fs.copyFileSync('src/web/dashboard.html','dist/web/dashboard.html')\"",
     "test": "vitest run --exclude tests/sync.integration.test.ts --exclude tests/benchmark.test.ts && python3 -m unittest tests/hermes_plugin_boundary_test.py -v",
     "test:ts": "vitest run --exclude tests/sync.integration.test.ts --exclude tests/benchmark.test.ts",
     "test:benchmark": "vitest run tests/benchmark.test.ts --pool=forks --poolOptions.forks.singleFork=true",

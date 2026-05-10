@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { pathToFileURL } from 'node:url'
 import type { Server } from 'node:http'
 import { createDashboardServer } from '../src/web/server.js'
 import { FlyupMemStore } from '../src/core/store.js'
@@ -186,4 +188,35 @@ describe('Dashboard server management APIs', () => {
     expect(detail.experience.id).toBe('EXP-DASH-001')
     expect(detail.evidence[0].id).toBe(created.memory.id)
   })
+})
+
+describe('Dashboard packaged assets', () => {
+  it('serves dashboard HTML from compiled dist outside the project cwd', async () => {
+    const projectRoot = process.cwd()
+    execFileSync('npm', ['run', 'build'], { cwd: projectRoot, stdio: 'pipe' })
+    expect(fs.existsSync(path.join(projectRoot, 'dist', 'web', 'dashboard.html'))).toBe(true)
+
+    const originalCwd = process.cwd()
+    const dir = tmpDir()
+    let builtServer: Server | undefined
+    let listening = false
+    try {
+      process.chdir(os.tmpdir())
+      const moduleUrl = pathToFileURL(path.join(projectRoot, 'dist', 'web', 'server.js')).href
+      const mod = await import(`${moduleUrl}?packaged=${Date.now()}`)
+      builtServer = mod.createDashboardServer({ storePath: dir })
+      const builtBaseUrl = await listen(builtServer)
+      listening = true
+
+      const res = await fetch(`${builtBaseUrl}/dashboard`)
+      const body = await res.text()
+      expect(res.status).toBe(200)
+      expect(body).toContain('FlyupMem')
+      expect(body).toContain('Create Memory')
+    } finally {
+      if (builtServer && listening) await close(builtServer)
+      process.chdir(originalCwd)
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  }, 90000)
 })
