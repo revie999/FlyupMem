@@ -88,7 +88,7 @@ describe('applyFeedback', () => {
   })
 
   it('applies negative feedback and reduces activation', () => {
-    const result = flyupLearn('以后都用 Jest', '好的', store)
+    const result = flyupLearn('以后都用 Vitest 执行测试用例', '好的', store)
     const memId = result.engramIds[0]
 
     const before = store.getEngramById(memId)!

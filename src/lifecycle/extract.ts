@@ -1,6 +1,6 @@
 // src/lifecycle/extract.ts — Rule-based engram extraction from conversation
 
-import type { Engram, MemoryType, Polarity } from '../core/types.js'
+import type { Engram, MemoryType, Polarity, Entity } from '../core/types.js'
 import { generateId, nextSequence } from '../core/id.js'
 import { contentHash } from '../core/hash.js'
 
@@ -46,8 +46,69 @@ function cleanCapture(text: string): string {
   return text.trim().replace(/[。.!！?？]+$/u, '')
 }
 
+/**
+ * Post-match quality filter: reject statement fragments that are clearly
+ * conversation noise rather than memorizable knowledge.
+ *
+ * Applied to every rule-based extraction *after* the pattern match succeeds.
+ * Returns true when the statement should be ACCEPTED.
+ */
+function passesQualityGate(statement: string): boolean {
+  const s = statement.trim()
+
+  // Minimum length: single-word or 2-char fragments are useless
+  if (s.length < 8) return false
+
+  // Reject pure question fragments (question particles at the end)
+  if (/(?:吧|吗|呢|啊|哦|？|\?|[?])$/u.test(s)) return false
+
+  // Reject fragments that start with filler / hedge words without a concrete assertion
+  if (/^应该是\b/u.test(s) && !/[。.!！;；]$/.test(s)) return false
+  if (/^不是\b/u.test(s) && !/[。.!！;；]$/.test(s)) return false
+
+  // Reject statements that are just "不是 xxx" / "应该 xxx" without actionable detail
+  // Allow if they contain specific technical nouns (URL path, tool name, config key)
+  if (/^不是\b/u.test(s)) {
+    // Only accept if it names a concrete tool/skill/config entity
+    if (!/[\w-]{4,}/.test(s)) return false
+  }
+
+  // Reject self-referential prompts like "这个你会用吗" / "你能用吗"
+  if (/能[用做]?吗|会[用做]?吗|能用[吗？]/u.test(s)) return false
+
+  // Reject fragments ending with trailing punctuation that suggests an incomplete thought
+  if (/[,，、…]$/.test(s)) return false
+
+  return true
+}
+
+/**
+ * Extract entities from a statement: tool names, config keys, URLs, ports, etc.
+ * Returns an array of Entity objects.
+ */
+function extractEntities(statement: string): Entity[] {
+  const entities: Entity[] = []
+  const seen = new Set<string>()
+  const addEntity = (name: string, type: string) => {
+    if (!seen.has(name) && name.length > 2) { seen.add(name); entities.push({ name, type }) }
+  }
+
+  // URLs
+  for (const m of statement.matchAll(/https?:\/\/[^\s，。'"`]+/g)) addEntity(m[0], 'url')
+  // Version-like patterns
+  for (const m of statement.matchAll(/\bv\d+\.\d+\.\d+\b/g)) addEntity(m[0], 'version')
+  // kebab-case/camelCase tool/skill/config names
+  for (const m of statement.matchAll(/\b[a-z]{2,}(?:[-_][a-z0-9]+){1,4}\b/gi)) {
+    const v = m[0]; if (!['http', 'https'].includes(v)) addEntity(v, 'tool')
+  }
+  // Quoted strings
+  for (const m of statement.matchAll(/['"`]([^'"`]{3,40})['"`]/g)) addEntity(m[1], 'concept')
+
+  return entities
+}
+
 const PATTERNS: ExtractionPattern[] = [
-  // Secrets and environment facts. Secrets are intentionally redacted.
+  // Secrets and device facts. Secrets are intentionally redacted.
   {
     regex: /\b(?:sk|ghp|github_pat|xox[baprs]|hf|tp)-[A-Za-z0-9_\-]{16,}\b/u,
     type: 'procedural',
@@ -85,7 +146,7 @@ const PATTERNS: ExtractionPattern[] = [
     confidence: 7,
   },
   {
-    regex: /(https?:\/\/[^\s，。'"`]+(?:\.[^\s，。'"`]+)?)/iu,
+    regex: /(https?:\/\/[^\s，。'"`]+(?:\.[^\s，。'"`]*)?)/iu,
     type: 'procedural',
     polarity: 'do',
     domain: 'environment/url',
@@ -121,13 +182,15 @@ const PATTERNS: ExtractionPattern[] = [
     confidence: 7,
   },
 
-  // User corrections
-  { regex: /不是[，,]?\s*(.{5,})/u, type: 'terminological', polarity: 'dont' },
-  { regex: /不对[，,]?\s*(.{5,})/u, type: 'terminological', polarity: 'dont' },
-  { regex: /应该\s*(.{5,})/u, type: 'procedural', polarity: 'do' },
-  { regex: /以后\s*(.{5,})/u, type: 'behavioral', polarity: 'do' },
-  { regex: /记住[：:]\s*(.{5,})/u, type: 'behavioral', polarity: null },
-  { regex: /不要\s*(.{5,})/u, type: 'behavioral', polarity: 'dont' },
+  // User corrections — tightened. Require the "不是/不对" to be followed by
+  // a concrete correction, not a conversational question.
+  { regex: /不是[，,]\s*(.{8,})/u, type: 'terminological', polarity: 'dont' },
+  { regex: /不对[，,]\s*(.{8,})/u, type: 'terminological', polarity: 'dont' },
+
+  // User instructions — tightened minimum lengths and gated by quality filter below.
+  { regex: /以后\s*(.{8,})/u, type: 'behavioral', polarity: 'do' },
+  { regex: /记住[：:]\s*(.{8,})/u, type: 'behavioral', polarity: null },
+  { regex: /不要\s*(.{8,})/u, type: 'behavioral', polarity: 'dont' },
   {
     regex: /用\s*(\S+)\s*不用\s*(\S+)/u,
     type: 'terminological',
@@ -137,20 +200,20 @@ const PATTERNS: ExtractionPattern[] = [
     statement: match => `默认使用 ${match[1]}，不要使用 ${match[2]}。`,
   },
 
-  // Preferences
-  { regex: /我喜欢\s*(.{3,})/u, type: 'behavioral', polarity: 'do' },
-  { regex: /我希望\s*(.{3,})/u, type: 'behavioral', polarity: 'do' },
-  { regex: /默认\s*(.{3,})/u, type: 'behavioral', polarity: 'do' },
-  { regex: /尽量\s*(.{3,})/u, type: 'behavioral', polarity: 'do' },
-  { regex: /别\s*(.{3,})/u, type: 'behavioral', polarity: 'dont' },
+  // Preferences — raise minLength from 3 to 8
+  { regex: /我喜欢\s*(.{8,})/u, type: 'behavioral', polarity: 'do' },
+  { regex: /我希望\s*(.{8,})/u, type: 'behavioral', polarity: 'do' },
+  { regex: /默认\s*(.{8,})/u, type: 'behavioral', polarity: 'do' },
+  { regex: /尽量\s*(.{8,})/u, type: 'behavioral', polarity: 'do' },
+  { regex: /别\s*(.{8,})/u, type: 'behavioral', polarity: 'dont' },
 
-  // Decisions
-  { regex: /就这样[，,]?\s*(.{3,})/u, type: 'architectural', polarity: 'do' },
-  { regex: /定了[，,]?\s*(.{3,})/u, type: 'architectural', polarity: 'do' },
-  { regex: /以后都\s*(.{5,})/u, type: 'behavioral', polarity: 'do' },
-  { regex: /统一\s*(.{3,})/u, type: 'architectural', polarity: 'do' },
+  // Decisions — tighten minLength
+  { regex: /就这样[，,]?\s*(.{8,})/u, type: 'architectural', polarity: 'do' },
+  { regex: /定了[，,]?\s*(.{8,})/u, type: 'architectural', polarity: 'do' },
+  { regex: /以后都\s*(.{8,})/u, type: 'behavioral', polarity: 'do' },
+  { regex: /统一\s*(.{8,})/u, type: 'architectural', polarity: 'do' },
 
-  // English patterns
+  // English patterns — tighten
   {
     regex: /(?:use|prefer)\s+(\S+)\s+(?:instead of|not)\s+(\S+)/i,
     type: 'terminological',
@@ -159,9 +222,9 @@ const PATTERNS: ExtractionPattern[] = [
     tags: ['tool-preference'],
     statement: match => `Default to ${match[1]} instead of ${match[2]}.`,
   },
-  { regex: /(?:don't|do not)\s+(.{5,})/i, type: 'behavioral', polarity: 'dont' },
-  { regex: /(?:remember|note)\s+(?:that\s+)?(.{5,})/i, type: 'behavioral', polarity: null },
-  { regex: /(?:always|default to)\s+(.{5,})/i, type: 'behavioral', polarity: 'do' },
+  { regex: /(?:don't|do not)\s+(.{8,})/i, type: 'behavioral', polarity: 'dont' },
+  { regex: /(?:remember|note)\s+(?:that\s+)?(.{8,})/i, type: 'behavioral', polarity: null },
+  { regex: /(?:always|default to)\s+(.{8,})/i, type: 'behavioral', polarity: 'do' },
 ]
 
 /**
@@ -189,6 +252,11 @@ export function extractEngramsFromTurn(
 
     const statement = pattern.statement ? pattern.statement(match) : match[0]
     if (results.some(r => r.statement === statement)) continue
+
+    // Quality gate: reject conversation noise
+    if (!passesQualityGate(statement)) continue
+
+    const entities = extractEntities(statement)
     const seq = nextSequence([...existingIds, ...results.map(r => r.id)], 'raw')
 
     results.push({
@@ -211,7 +279,7 @@ export function extractEngramsFromTurn(
       rationale: '',
       contraindications: [],
 
-      entities: [],
+      entities,
       temporal: {
         learned_at: now,
         valid_from: now,

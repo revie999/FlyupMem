@@ -38,12 +38,12 @@ describe('Knowledge Pack', () => {
 
   it('exports with data as YAML', () => {
     flyupLearn('记住：端口是 7897', '好的', store)
-    flyupLearn('我喜欢简洁回复', '明白', store)
+    flyupLearn('记住：主人偏好主人用代码块包裹表格', '明白', store)
 
     const content = exportKnowledgePack(store, 'yaml')
     expect(content).toContain('engrams:')
     expect(content).toContain('端口')
-    expect(content).toContain('简洁')
+    expect(content).toContain('代码块')
   })
 
   it('exports as JSON', () => {

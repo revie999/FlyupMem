@@ -15,7 +15,7 @@ describe('extractEngramsFromTurn', () => {
 
   it('extracts preference pattern', () => {
     const results = extractEngramsFromTurn(
-      '我喜欢简洁直接的回复',
+      '我喜欢主人用代码块包裹表格的格式',
       '明白',
     )
     expect(results.length).toBeGreaterThan(0)
