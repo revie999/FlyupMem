@@ -5,6 +5,14 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/revie999/FlyupMem.git"
+  },
+  "bugs": {
+    "url": "https://github.com/revie999/FlyupMem/issues"
+  },
+  "homepage": "https://github.com/revie999/FlyupMem#readme",
   "bin": {
     "flyupmem": "dist/index.js",
     "flyupmem-mcp": "dist/mcp/entry.js"
@@ -23,7 +31,12 @@
     "memory",
     "ai-agent",
     "local-first",
-    "yaml"
+    "yaml",
+    "agent-memory",
+    "mcp",
+    "model-context-protocol",
+    "sqlite",
+    "semantic-search"
   ],
   "license": "MIT",
   "engines": {

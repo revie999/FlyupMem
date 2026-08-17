@@ -2,6 +2,27 @@
 
 Local-first memory for AI agents. FlyupMem stores human-editable memories in YAML, builds a rebuildable SQLite cache for search, and exposes the same memory store through a CLI, MCP server, OpenClaw plugin, and Hermes plugin boundary.
 
+## Why FlyupMem
+
+AI agents need memory that remains inspectable, portable, and maintainable after the
+original session has ended. FlyupMem keeps YAML as the source of truth and treats
+SQLite as a rebuildable search cache. This gives users a local-first memory layer
+that can be reviewed in version control, repaired from source data, and exposed
+through the integration surface their agent already uses.
+
+### Maintainer-facing guarantees
+
+- **Inspectable data:** memories remain human-editable YAML rather than an opaque
+  vector-store-only format.
+- **Rebuildable retrieval:** the SQLite index is derived data and can be rebuilt
+  from the YAML store.
+- **Conservative operations:** migration is dry-run by default; apply mode creates
+  a snapshot and rolls back when a migration step fails.
+- **Portable integration:** one store is available through the CLI, MCP server,
+  OpenClaw plugin, and Hermes plugin boundary.
+- **Offline-first baseline:** BM25/FTS retrieval works without downloading a model;
+  semantic retrieval is an explicit optional enhancement.
+
 ## What It Does
 
 - Learns candidate memories from conversation turns.
